@@ -4,3 +4,6 @@ python-worker/utils/__pycache__
 apps/python-worker/.cache
 
 apps/python-worker/utils/__pycache__/
+.env
+apps/python-worker/.env
+apps/web/.env
