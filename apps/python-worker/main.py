@@ -6,38 +6,109 @@ from utils.youtube import search_youtube
 from utils.soundcloud import search_soundcloud
 from utils.transitions import suggest_transitions
 from utils.librosa import run_beat_track
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+import os
+from typing import List, Optional
+import librosa
 
-def main():
-    # prompt = input("Enter a mood/genre prompt: ")
-    # features = interpret_mood(prompt)
-    # print(f"Interpreted features: {features}")
+# Create FastAPI app instance
+app = FastAPI(title="AI DJ Backend")
+
+# Enable CORS for our Next.js frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Directory where music files are stored
+MUSIC_DIR = os.path.expanduser("~/Downloads")  # We'll use Downloads folder for testing
+
+class TrackInfo(BaseModel):
+    filename: str
+    duration: float
+    title: Optional[str] = None
+    artist: Optional[str] = None
+
+@app.get("/")
+async def root():
+    """Root endpoint to verify API is running"""
+    return {"status": "ok", "message": "AI DJ Backend is running"}
+
+@app.get("/tracks", response_model=List[TrackInfo])
+async def list_tracks():
+    """List all available music tracks"""
+    tracks = []
+    for file in os.listdir(MUSIC_DIR):
+        if file.endswith(('.mp3', '.wav', '.m4a')):
+            try:
+                y, sr = librosa.load(os.path.join(MUSIC_DIR, file), duration=10)  # Load first 10 seconds for quick analysis
+                duration = librosa.get_duration(y=y, sr=sr)
+                
+                # For now, we'll use filename as title
+                title = os.path.splitext(file)[0]
+                
+                tracks.append(TrackInfo(
+                    filename=file,
+                    duration=duration,
+                    title=title,
+                    artist="Unknown"  # We can add ID3 tag reading later
+                ))
+            except Exception as e:
+                print(f"Error processing {file}: {str(e)}")
+                continue
+    
+    return tracks
+
+@app.get("/track/{filename}/analysis")
+async def analyze_track(filename: str):
+    """Get beat analysis for a track"""
+    file_path = os.path.join(MUSIC_DIR, filename)
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Track not found")
+    
+    try:
+        return {
+            "success": True
+        }
+        # beat_times = run_beat_track()
+        # return {
+        #     "beat_times": beat_times.tolist(),
+        #     "success": True
+        # }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/track/{filename}/waveform")
+async def get_waveform(filename: str):
+    """Get waveform data for visualization"""
+    file_path = os.path.join(MUSIC_DIR, filename)
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Track not found")
+    
+    try:
+        y, sr = librosa.load(file_path)
+        # Reduce waveform resolution for frontend visualization
+        hop_length = 1024
+        waveform = librosa.feature.rms(y=y, hop_length=hop_length)[0]
+        
+        return {
+            "waveform": waveform.tolist(),
+            "sample_rate": sr,
+            "hop_length": hop_length
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+def run_mix_analysis():
+    """Original main function logic for mix analysis"""
     beat_track = run_beat_track()
     print(beat_track)
-    # tracks = search_tracks(features, limit=7)
-    # track_ids = [t['id'] for t in tracks]
-    # audio_features = get_audio_features(track_ids)
-    # Merge metadata and features
-    # track_features = []
-    # for t, f in zip(tracks, audio_features):
-    #     if not f: continue
-    #     t.update({
-    #         "tempo": f["tempo"],
-    #         "key": f["key"],
-    #         "energy": f["energy"]
-    #     })
-    #     t["youtube_url"] = search_youtube(t["title"], t["artist"])
-    #     t["soundcloud_url"] = search_soundcloud(t["title"], t["artist"])
-    #     track_features.append(t)
-    # mix_plan = suggest_transitions(track_features)
-    # total_duration = sum([f.get("duration_ms", 180000) for f in audio_features]) // 1000
-    # print("\nMix Plan:")
-    # for i, track in enumerate(mix_plan):
-    #     print(f"{i+1}. {track['title']} - {track['artist']} | BPM: {track['bpm']} | Key: {track['key']} | Energy: {track['energy']:.2f}")
-    #     print(f"   YouTube: {track['youtube_url']}")
-    #     print(f"   SoundCloud: {track['soundcloud_url']}")
-    #     if track['transition_to_next']:
-    #         print(f"   Transition: {track['transition_to_next']}")
-    # print(f"\nEstimated mix duration: {total_duration//60}:{total_duration%60:02d}")
 
 if __name__ == "__main__":
-    main() 
+    import uvicorn
+    uvicorn.run(app, host="127.0.0.1", port=8000) 

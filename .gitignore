@@ -1,2 +1,6 @@
 python-worker/.venv
 python-worker/utils/__pycache__
+
+apps/python-worker/.cache
+
+apps/python-worker/utils/__pycache__/
