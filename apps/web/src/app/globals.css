@@ -1,5 +1,6 @@
 @import "tailwindcss/preflight";
 @tailwind utilities;
+@import "react-virtualized/styles.css";
 
 :root {
   --foreground-rgb: 255, 255, 255;
