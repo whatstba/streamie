@@ -16,3 +16,5 @@ debugpy
 soundfile==0.12.1
 youtube-dl==2021.12.17
 serato-tools==1.8.0
+pymongo==4.6.0
+essentia

@@ -8,6 +8,7 @@ from utils.transitions import suggest_transitions
 from utils.librosa import run_beat_track
 from utils.id3_reader import read_audio_metadata, extract_artwork
 from utils.serato_reader import serato_reader
+from utils.db import get_db
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, StreamingResponse
@@ -16,7 +17,6 @@ import os
 from typing import List, Optional, Dict, Any
 import librosa
 import mimetypes
-from pathlib import Path
 
 # Create FastAPI app instance
 app = FastAPI(title="AI DJ Backend")
@@ -52,10 +52,17 @@ class TrackInfo(BaseModel):
     year: Optional[str] = None
     has_artwork: bool = False
     bpm: Optional[float] = None  # Add BPM to track model
+    mood: Optional[str] = None  # Mood label from Essentia
+
+class TrackDBInfo(TrackInfo):
+    """Track info stored in the database including beat timestamps."""
+    beat_times: List[float] = []
 
 class TrackAnalysisResponse(BaseModel):
     """Enhanced track analysis response with Serato data"""
     bpm: float
+    beat_times: List[float] = []
+    mood: Optional[str] = None
     success: bool
     confidence: float = 0.85
     analysis_time: str = "instant"
@@ -67,6 +74,18 @@ class TrackAnalysisResponse(BaseModel):
 async def root():
     """Root endpoint to verify API is running"""
     return {"status": "ok", "message": "AI DJ Backend is running"}
+
+
+@app.get("/db/tracks", response_model=List[TrackDBInfo])
+async def list_tracks_from_db():
+    """Return track info stored in MongoDB."""
+    db = get_db()
+    docs = list(db.tracks.find({}))
+    tracks = []
+    for d in docs:
+        d.pop("_id", None)
+        tracks.append(TrackDBInfo(**d))
+    return tracks
 
 @app.get("/tracks", response_model=List[TrackInfo])
 async def list_tracks(include_bpm: bool = False):
@@ -187,10 +206,18 @@ async def analyze_track_enhanced(filepath: str):
     
     try:
         print(f"🎧 ANALYZING TRACK: {os.path.basename(filepath)}")
-        
-        # Get BPM analysis
-        bpm = run_beat_track(file_path)
-        print(f"🎵 BPM Analysis: {bpm:.2f} BPM")
+
+        # Look up precomputed analysis in the database
+        db = get_db()
+        doc = db.tracks.find_one({"filepath": filepath})
+        if not doc:
+            raise HTTPException(status_code=404, detail="Track analysis not found")
+
+        bpm = doc.get("bpm")
+        beat_times = doc.get("beat_times", [])
+        mood = doc.get("mood")
+
+        print(f"🎵 BPM Analysis: {bpm:.2f} BPM ({len(beat_times)} beats)")
         
         # Get Serato data including hot cues
         try:
@@ -228,6 +255,8 @@ async def analyze_track_enhanced(filepath: str):
         
         response = TrackAnalysisResponse(
             bpm=bpm,
+            beat_times=beat_times,
+            mood=mood,
             success=True,
             confidence=0.90 if len(hot_cues) > 0 else 0.85,  # Higher confidence if Serato data exists
             analysis_time="enhanced",
@@ -236,7 +265,9 @@ async def analyze_track_enhanced(filepath: str):
             hot_cues=hot_cues
         )
         
-        print(f"✅ Analysis complete: {bpm:.2f} BPM, {len(hot_cues)} cues, Serato: {serato_info.get('serato_available', False)}")
+        print(
+            f"✅ Analysis complete: {bpm:.2f} BPM, mood={mood}, {len(hot_cues)} cues, Serato: {serato_info.get('serato_available', False)}"
+        )
         return response
         
     except Exception as e:

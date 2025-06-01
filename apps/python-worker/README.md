@@ -4,7 +4,7 @@ This is a command-line MVP for an AI DJ system that curates and arranges a short
 
 ## Features
 - Accepts a mood/genre prompt (e.g., "afrobeats party starter", "deep house afterhours")
-- Selects a sequence of tracks that fit the vibe, based on audio features (BPM, key, energy, etc.)
+- Selects a sequence of tracks that fit the vibe, based on audio features (BPM, key, energy, mood, etc.)
 - Analyzes transition points and proposes smooth transitions
 - Outputs a Mix Plan with tracklist, transition suggestions, and estimated duration
 
@@ -30,6 +30,13 @@ Run the main script:
 python main.py
 ```
 Enter a mood/genre prompt when prompted. The system will output a mix plan with tracklist, transitions, and streaming links.
+
+### Pre-compute Track BPM and Mood
+Analyze all tracks and store their BPM, beat grids, and mood classification in MongoDB:
+
+```bash
+python scripts/create_track_db.py
+```
 
 ## Extending
 - Add more moods/genres to `utils/mood_interpreter.py`
