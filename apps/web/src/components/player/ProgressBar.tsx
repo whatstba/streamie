@@ -4,7 +4,7 @@ import React, { useState, useRef } from 'react';
 import { useAudioPlayer } from '@/context/AudioPlayerContext';
 
 const ProgressBar: React.FC = () => {
-  const { currentTime, duration, seekTo } = useAudioPlayer();
+  const { currentTime, duration, seek } = useAudioPlayer();
   const [isDragging, setIsDragging] = useState(false);
   const [dragTime, setDragTime] = useState(0);
   const progressRef = useRef<HTMLDivElement>(null);
@@ -46,7 +46,7 @@ const ProgressBar: React.FC = () => {
 
   const handleMouseUp = () => {
     if (isDragging) {
-      seekTo(dragTime);
+      seek(dragTime);
       setIsDragging(false);
     }
   };
@@ -73,19 +73,19 @@ const ProgressBar: React.FC = () => {
     switch (e.key) {
       case 'ArrowLeft':
         e.preventDefault();
-        seekTo(Math.max(0, currentDisplayTime - 5));
+        seek(Math.max(0, currentDisplayTime - 5));
         break;
       case 'ArrowRight':
         e.preventDefault();
-        seekTo(Math.min(duration, currentDisplayTime + 5));
+        seek(Math.min(duration, currentDisplayTime + 5));
         break;
       case 'Home':
         e.preventDefault();
-        seekTo(0);
+        seek(0);
         break;
       case 'End':
         e.preventDefault();
-        seekTo(duration);
+        seek(duration);
         break;
     }
   };

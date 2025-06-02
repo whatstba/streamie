@@ -18,10 +18,10 @@ const AudioControls: React.FC = () => {
     repeat,
     shuffle,
     pause,
-    resume,
+    play,
     skipToNext,
-    previousTrack,
-    setRepeat,
+    skipToPrevious,
+    toggleRepeat,
     toggleShuffle,
   } = useAudioPlayer();
 
@@ -29,13 +29,12 @@ const AudioControls: React.FC = () => {
     if (isPlaying) {
       pause();
     } else {
-      resume();
+      play();
     }
   };
 
   const handleRepeatClick = () => {
-    const nextRepeatMode = repeat === 'none' ? 'all' : repeat === 'all' ? 'one' : 'none';
-    setRepeat(nextRepeatMode);
+    toggleRepeat();
   };
 
   const getRepeatIcon = () => {
@@ -80,7 +79,7 @@ const AudioControls: React.FC = () => {
       {/* Main Controls */}
       <div className="flex items-center gap-4">
         <button
-          onClick={previousTrack}
+          onClick={skipToPrevious}
           disabled={!currentTrack}
           className="text-gray-400 hover:text-white transition disabled:opacity-50 disabled:cursor-not-allowed"
           title="Previous Track"

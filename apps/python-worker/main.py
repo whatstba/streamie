@@ -7,8 +7,9 @@ from utils.soundcloud import search_soundcloud
 from utils.transitions import suggest_transitions
 from utils.librosa import run_beat_track
 from utils.id3_reader import read_audio_metadata, extract_artwork
-from utils.serato_reader import serato_reader
+# from utils.serato_reader import serato_reader  # Temporarily disabled
 from utils.db import get_db
+from agents.dj_agent import DJAgent  # Import the DJ agent
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, StreamingResponse
@@ -17,9 +18,16 @@ import os
 from typing import List, Optional, Dict, Any
 import librosa
 import mimetypes
+import re
+import random
+import asyncio
+import sqlite3
+from mutagen import File
+from datetime import datetime
+import json
 
-# Import the AI router
-from routers.ai_router import router as ai_router
+# Import the AI router - temporarily disabled
+# from routers.ai_router import router as ai_router
 
 # Create FastAPI app instance
 app = FastAPI(title="AI DJ Backend")
@@ -27,14 +35,14 @@ app = FastAPI(title="AI DJ Backend")
 # Enable CORS for our Next.js frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["http://localhost:3000", "http://localhost:3001"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Include the AI router
-app.include_router(ai_router)
+# Include the AI router - temporarily disabled
+# app.include_router(ai_router)
 
 # Directory where music files are stored
 MUSIC_DIR = os.path.expanduser("~/Downloads")  # We'll use Downloads folder for testing
@@ -58,7 +66,7 @@ class TrackInfo(BaseModel):
     year: Optional[str] = None
     has_artwork: bool = False
     bpm: Optional[float] = None  # Add BPM to track model
-    mood: Optional[str] = None  # Mood label from Essentia
+    # mood field removed - it's stored as a dict in SQLite
 
 class TrackDBInfo(TrackInfo):
     """Track info stored in the database including beat timestamps."""
@@ -76,10 +84,19 @@ class TrackAnalysisResponse(BaseModel):
     serato_data: Dict[str, Any] = {}
     hot_cues: List[SeratoHotCue] = []
 
+class VibePlaylistRequest(BaseModel):
+    vibe_description: str
+    playlist_length: int = 10
+
+class VibePlaylistResponse(BaseModel):
+    playlist: List[TrackInfo]
+    vibe_analysis: Dict[str, Any]
+    total_tracks_considered: int
+
 @app.get("/")
 async def root():
     """Root endpoint to verify API is running"""
-    return {"status": "ok", "message": "AI DJ Backend is running"}
+    return {"status": "ok", "message": "AI DJ Backend is running", "ai_enabled": False}
 
 
 @app.get("/db/tracks", response_model=List[TrackDBInfo])
@@ -205,7 +222,7 @@ async def batch_analyze_tracks(filepaths: List[str]):
 
 @app.get("/track/{filepath:path}/analysis", response_model=TrackAnalysisResponse)
 async def analyze_track_enhanced(filepath: str):
-    """Get comprehensive track analysis including BPM and Serato hot cues"""
+    """Get comprehensive track analysis including BPM - Serato temporarily disabled"""
     file_path = os.path.join(MUSIC_DIR, filepath)
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="Track not found")
@@ -213,67 +230,70 @@ async def analyze_track_enhanced(filepath: str):
     try:
         print(f"🎧 ANALYZING TRACK: {os.path.basename(filepath)}")
 
-        # Look up precomputed analysis in the database
-        db = get_db()
-        doc = db.tracks.find_one({"filepath": filepath})
+        # Look up precomputed analysis in the SQLite database
+        db_sqlite = get_sqlite_db()
+        cursor = db_sqlite.adapter.connection.cursor()
+        cursor.execute("SELECT * FROM tracks WHERE filepath = ?", (filepath,))
+        columns = [description[0] for description in cursor.description]
+        row = cursor.fetchone()
+        cursor.close()
+        
+        doc = None
+        if row:
+            doc = dict(zip(columns, row))
+            # Parse beat_times if it's a JSON string
+            if doc.get("beat_times") and isinstance(doc["beat_times"], str):
+                try:
+                    doc["beat_times"] = json.loads(doc["beat_times"])
+                except json.JSONDecodeError:
+                    doc["beat_times"] = [] # Default to empty list on error
+            elif not doc.get("beat_times"):
+                 doc["beat_times"] = [] # Ensure beat_times exists
+
         if not doc:
-            raise HTTPException(status_code=404, detail="Track analysis not found")
-
-        bpm = doc.get("bpm")
-        beat_times = doc.get("beat_times", [])
-        mood = doc.get("mood")
-
-        print(f"🎵 BPM Analysis: {bpm:.2f} BPM ({len(beat_times)} beats)")
-        
-        # Get Serato data including hot cues
-        try:
-            serato_info = serato_reader.get_serato_info(file_path)
-            print(f"🎛️ Serato Data: Found {len(serato_info.get('hot_cues', []))} hot cues")
-        except Exception as serato_error:
-            print(f"⚠️ Serato analysis failed: {serato_error}")
-            serato_info = {'hot_cues': [], 'serato_available': False}
-        
-        # Convert Serato hot cues to response format
-        hot_cues = []
-        for cue_data in serato_info.get('hot_cues', []):
+            # If not in database, do live analysis
             try:
-                hot_cue = SeratoHotCue(
-                    name=cue_data.get('name', 'Unknown Cue'),
-                    time=cue_data.get('time', 0.0),
-                    color=cue_data.get('color', '#ff0000'),
-                    type=cue_data.get('type', 'cue'),
-                    index=cue_data.get('index', len(hot_cues))
-                )
-                hot_cues.append(hot_cue)
-                print(f"   📍 Hot Cue: {hot_cue.name} at {hot_cue.time:.2f}s ({hot_cue.color})")
-            except Exception as cue_error:
-                print(f"   ❌ Error processing cue: {cue_error}")
-                continue
+                bpm = run_beat_track(file_path)
+                beat_times = [] # Live analysis doesn't provide beat_times here
+                mood = None # Live analysis doesn't provide mood here
+                energy_level = None # Live analysis doesn't provide energy_level
+                print(f"🎵 Live BPM Analysis: {bpm:.2f} BPM")
+            except Exception as e:
+                print(f"❌ Live analysis failed: {e}")
+                raise HTTPException(status_code=500, detail="Live analysis failed")
+        else:
+            bpm = doc.get("bpm")
+            beat_times = doc.get("beat_times", [])
+            mood = doc.get("mood") # mood might not be in SQLite schema yet
+            energy_level = doc.get("energy_level") # energy_level from SQLite
+            print(f"🎵 Database BPM: {bpm:.2f} BPM ({len(beat_times)} beats), Energy: {energy_level}")
         
-        # Suggested transitions based on BPM and Serato data
+        # Serato data temporarily disabled
+        serato_info = {'hot_cues': [], 'serato_available': False}
+        hot_cues = []
+        
+        # Suggested transitions based on BPM only (no Serato)
         suggested_transitions = {
             "filter_sweep": bpm > 120,
             "echo_effect": 100 <= bpm <= 140,
             "scratch_compatible": bpm >= 80,
-            "has_serato_cues": len(hot_cues) > 0,
-            "loop_ready": any(cue.type == 'loop' for cue in hot_cues)
+            "has_serato_cues": False,  # Disabled
+            "loop_ready": False  # Disabled
         }
         
         response = TrackAnalysisResponse(
             bpm=bpm,
-            beat_times=beat_times,
+            beat_times=beat_times, # Ensure this is a list
             mood=mood,
             success=True,
-            confidence=0.90 if len(hot_cues) > 0 else 0.85,  # Higher confidence if Serato data exists
+            confidence=0.85,  # Standard confidence without Serato
             analysis_time="enhanced",
             suggested_transitions=suggested_transitions,
             serato_data=serato_info,
             hot_cues=hot_cues
         )
         
-        print(
-            f"✅ Analysis complete: {bpm:.2f} BPM, mood={mood}, {len(hot_cues)} cues, Serato: {serato_info.get('serato_available', False)}"
-        )
+        print(f"✅ Analysis complete: {bpm:.2f} BPM, mood={mood}")
         return response
         
     except Exception as e:
@@ -282,16 +302,8 @@ async def analyze_track_enhanced(filepath: str):
 
 @app.get("/track/{filepath:path}/serato")
 async def get_serato_data(filepath: str):
-    """Get only Serato data for a track (hot cues, loops, etc.)"""
-    file_path = os.path.join(MUSIC_DIR, filepath)
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="Track not found")
-    
-    try:
-        serato_info = serato_reader.get_serato_info(file_path)
-        return serato_info
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    """Get only Serato data for a track - temporarily disabled"""
+    return {"error": "Serato functionality temporarily disabled", "serato_available": False}
 
 @app.get("/track/{filepath:path}/waveform")
 async def get_waveform(filepath: str):
@@ -412,6 +424,342 @@ async def stream_audio(filepath: str, request: Request):
             )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/ai/generate-vibe-playlist", response_model=VibePlaylistResponse)
+async def generate_vibe_playlist(request: VibePlaylistRequest):
+    """Generate a playlist based on vibe description using DJ agent"""
+    try:
+        print("\n" + "="*60)
+        print(f"🎨 VIBE PLAYLIST REQUEST")
+        print(f"   Vibe: '{request.vibe_description}'")
+        print(f"   Length: {request.playlist_length} tracks")
+        print("="*60)
+        
+        # Initialize DJ agent
+        dj_agent = DJAgent()
+        
+        # Generate playlist using the new agentic approach
+        result = await dj_agent.generate_playlist(
+            vibe_description=request.vibe_description,
+            length=request.playlist_length,
+            energy_pattern="wave",  # Could be determined from vibe analysis
+            thread_id=f"vibe-{datetime.now().timestamp()}"  # Unique thread ID
+        )
+        
+        if not result["success"]:
+            raise HTTPException(status_code=500, detail=result.get("error", "Failed to generate playlist"))
+        
+        # Parse the agent's response to extract playlist
+        response_text = result["response"]
+        
+        print(f"\n🤖 Agent Response:\n{response_text}")
+        
+        # Extract the finalized playlist from the agent
+        finalized_playlist = result.get("finalized_playlist", [])
+        playlist_tracks = []
+        
+        if finalized_playlist:
+            print(f"\n✅ Agent provided structured playlist with {len(finalized_playlist)} tracks")
+            
+            # Load our SQLite database to get full track info
+            db_path = os.path.join(os.path.dirname(__file__), 'tracks.db')
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+            
+            # Get full track info for each filepath in the playlist
+            for item in finalized_playlist:
+                filepath = item.get('filepath')
+                if not filepath:
+                    continue
+                    
+                cursor.execute("SELECT * FROM tracks WHERE filepath = ?", (filepath,))
+                columns = [description[0] for description in cursor.description]
+                row = cursor.fetchone()
+                
+                if row:
+                    track = dict(zip(columns, row))
+                    track_info = TrackInfo(
+                        filename=track.get('filename', ''),
+                        filepath=track.get('filepath', ''),
+                        duration=track.get('duration', 0.0),
+                        title=track.get('title'),
+                        artist=track.get('artist'),
+                        album=track.get('album'),
+                        genre=track.get('genre'),
+                        year=track.get('year'),
+                        has_artwork=track.get('has_artwork', False),
+                        bpm=track.get('bpm')
+                    )
+                    playlist_tracks.append(track_info)
+                    print(f"   {item['order']}. {track.get('title', 'Unknown')} - {track.get('artist', 'Unknown')} ({item.get('mixing_note', '')})")
+            
+            cursor.close()
+            conn.close()
+            
+        else:
+            # Fallback: Try to extract from state's candidate_tracks (old method)
+            print("\n⚠️ No finalized playlist from agent, checking for candidate tracks...")
+            state = result.get("state", {})
+            
+            if state.get("candidate_tracks"):
+                # Use candidate tracks from state
+                tracks_data = state["candidate_tracks"][:request.playlist_length]
+                for track in tracks_data:
+                    track_info = TrackInfo(
+                        filename=track.get('filename', ''),
+                        filepath=track.get('filepath', ''),
+                        duration=track.get('duration', 0.0),
+                        title=track.get('title'),
+                        artist=track.get('artist'),
+                        album=track.get('album'),
+                        genre=track.get('genre'),
+                        year=track.get('year'),
+                        has_artwork=track.get('has_artwork', False),
+                        bpm=track.get('bpm')
+                    )
+                    playlist_tracks.append(track_info)
+        
+        # If still no tracks, do the original fallback query
+        if not playlist_tracks:
+            print("\n⚠️ No tracks found in agent response, using fallback query")
+            
+            # Analyze the vibe description
+            vibe_analysis = analyze_vibe_description(request.vibe_description.lower())
+            
+            db_path = os.path.join(os.path.dirname(__file__), 'tracks.db')
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+            
+            # Build query based on vibe analysis
+            query = "SELECT * FROM tracks WHERE bpm IS NOT NULL"
+            params = []
+            
+            # Add energy level filtering
+            if vibe_analysis['energy_level'] > 0.6:
+                query += " AND (bpm > 120 OR energy_level > 0.6)"
+            elif vibe_analysis['energy_level'] < 0.4:
+                query += " AND (bpm < 110 OR energy_level < 0.4)"
+            
+            # Add genre filtering if specific genres detected
+            if vibe_analysis['genres']:
+                genre_conditions = []
+                for genre in vibe_analysis['genres']:
+                    genre_conditions.append("genre LIKE ?")
+                    params.append(f"%{genre}%")
+                if genre_conditions:
+                    query += f" AND ({' OR '.join(genre_conditions)})"
+            
+            query += " ORDER BY RANDOM() LIMIT ?"
+            params.append(request.playlist_length)
+            
+            cursor.execute(query, params)
+            columns = [description[0] for description in cursor.description]
+            
+            for row in cursor.fetchall():
+                track = dict(zip(columns, row))
+                track_info = TrackInfo(
+                    filename=track.get('filename', ''),
+                    filepath=track.get('filepath', ''),
+                    duration=track.get('duration', 0.0),
+                    title=track.get('title'),
+                    artist=track.get('artist'),
+                    album=track.get('album'),
+                    genre=track.get('genre'),
+                    year=track.get('year'),
+                    has_artwork=track.get('has_artwork', False),
+                    bpm=track.get('bpm')
+                )
+                playlist_tracks.append(track_info)
+            
+            cursor.close()
+            conn.close()
+        
+        # Create vibe analysis response
+        vibe_analysis_response = {
+            "agent_response": response_text,
+            "vibe_description": request.vibe_description,
+            "energy_pattern": "wave",
+            "energy_level": analyze_vibe_description(request.vibe_description.lower()).get('energy_level', 0.5),
+            "success": True
+        }
+        
+        print(f"\n✅ Playlist generated: {len(playlist_tracks)} tracks")
+        print("="*60 + "\n")
+        
+        return VibePlaylistResponse(
+            playlist=playlist_tracks,
+            vibe_analysis=vibe_analysis_response,
+            total_tracks_considered=1000  # Approximate
+        )
+        
+    except Exception as e:
+        print(f"❌ Error in generate_vibe_playlist: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+def determine_energy_pattern(vibe_analysis: Dict) -> str:
+    """Determine energy pattern from vibe analysis"""
+    activities = vibe_analysis.get("activities", [])
+    energy_level = vibe_analysis.get("energy_level", 0.5)
+    
+    if "workout" in activities or "party" in activities:
+        return "peak_time" if energy_level > 0.7 else "build_up"
+    elif "study" in activities or "relaxation" in activities:
+        return "cool_down"
+    elif energy_level > 0.7:
+        return "peak_time"
+    elif energy_level < 0.3:
+        return "cool_down"
+    else:
+        return "wave"
+
+def analyze_vibe_description(vibe_text: str) -> Dict[str, Any]:
+    """Analyze vibe description and extract musical preferences"""
+    analysis = {
+        'energy_level': 0.5,  # 0-1 scale
+        'bpm_preference': 'any',  # 'slow', 'medium', 'fast', 'any'
+        'genres': [],
+        'moods': [],
+        'activities': [],
+        'time_of_day': None,
+        'keywords': vibe_text.split()
+    }
+    
+    # Energy level keywords
+    high_energy_words = ['energetic', 'upbeat', 'pump', 'hype', 'intense', 'party', 'dance', 'workout', 'gym', 'running', 'fast', 'loud', 'banging']
+    low_energy_words = ['chill', 'relaxing', 'calm', 'mellow', 'soft', 'quiet', 'ambient', 'downtempo', 'slow', 'peaceful', 'study', 'sleep']
+    medium_energy_words = ['groove', 'smooth', 'cool', 'moderate', 'steady', 'walking']
+    
+    # Calculate energy level
+    high_count = sum(1 for word in high_energy_words if word in vibe_text)
+    low_count = sum(1 for word in low_energy_words if word in vibe_text)
+    medium_count = sum(1 for word in medium_energy_words if word in vibe_text)
+    
+    if high_count > low_count:
+        analysis['energy_level'] = 0.7 + (high_count * 0.1)
+        analysis['bpm_preference'] = 'fast'
+    elif low_count > high_count:
+        analysis['energy_level'] = 0.3 - (low_count * 0.1)
+        analysis['bpm_preference'] = 'slow'
+    elif medium_count > 0:
+        analysis['energy_level'] = 0.5
+        analysis['bpm_preference'] = 'medium'
+    
+    # Clamp energy level
+    analysis['energy_level'] = max(0.0, min(1.0, analysis['energy_level']))
+    
+    # Genre detection
+    genre_keywords = {
+        'hip-hop': ['hip-hop', 'hiphop', 'rap', 'hip hop'],
+        'r&b': ['r&b', 'rnb', 'soul', 'rhythm and blues'],
+        'jazz': ['jazz', 'bebop', 'smooth jazz'],
+        'electronic': ['electronic', 'edm', 'techno', 'house', 'dubstep', 'electro'],
+        'rock': ['rock', 'alternative', 'indie', 'punk'],
+        'pop': ['pop', 'mainstream', 'top 40'],
+        'reggae': ['reggae', 'dancehall', 'ska'],
+        'funk': ['funk', 'funky', 'groove'],
+        'latin': ['latin', 'salsa', 'reggaeton', 'spanish'],
+        'country': ['country', 'folk', 'acoustic']
+    }
+    
+    for genre, keywords in genre_keywords.items():
+        if any(keyword in vibe_text for keyword in keywords):
+            analysis['genres'].append(genre)
+    
+    # Activity detection
+    activity_keywords = {
+        'workout': ['workout', 'gym', 'exercise', 'running', 'jogging', 'training', 'working out'],
+        'party': ['party', 'club', 'dancing', 'celebration'],
+        'study': ['study', 'focus', 'concentration', 'reading'],
+        'relaxation': ['relax', 'chill', 'unwind', 'stress relief'],
+        'driving': ['driving', 'road trip', 'car', 'cruise'],
+        'romance': ['romantic', 'date', 'love', 'intimate']
+    }
+    
+    for activity, keywords in activity_keywords.items():
+        if any(keyword in vibe_text for keyword in keywords):
+            analysis['activities'].append(activity)
+    
+    # Time of day detection
+    if any(word in vibe_text for word in ['morning', 'breakfast', 'dawn']):
+        analysis['time_of_day'] = 'morning'
+    elif any(word in vibe_text for word in ['afternoon', 'lunch', 'midday']):
+        analysis['time_of_day'] = 'afternoon'
+    elif any(word in vibe_text for word in ['evening', 'dinner', 'sunset']):
+        analysis['time_of_day'] = 'evening'
+    elif any(word in vibe_text for word in ['night', 'late night', 'midnight', 'bedtime']):
+        analysis['time_of_day'] = 'night'
+    
+    return analysis
+
+def calculate_vibe_score(track_doc: Dict, vibe_analysis: Dict) -> float:
+    """Calculate how well a track matches the desired vibe"""
+    score = 0.0
+    
+    # BPM matching
+    bpm = track_doc.get('bpm')
+    if bpm:
+        bpm_score = 0.0
+        if vibe_analysis['bpm_preference'] == 'slow' and bpm < 100:
+            bpm_score = 1.0 - abs(80 - bpm) / 40  # Optimal around 80 BPM
+        elif vibe_analysis['bpm_preference'] == 'medium' and 90 <= bpm <= 130:
+            bpm_score = 1.0 - abs(110 - bpm) / 30  # Optimal around 110 BPM
+        elif vibe_analysis['bpm_preference'] == 'fast' and bpm > 120:
+            bpm_score = 1.0 - abs(140 - bpm) / 50  # Optimal around 140 BPM
+        else:
+            bpm_score = 0.5  # Neutral for 'any' or no clear preference
+        
+        score += max(0, bpm_score) * 0.3  # BPM contributes 30% to score
+    
+    # Energy level matching (using SQLite's calculated energy_level)
+    energy_level = track_doc.get('energy_level')
+    if energy_level is not None:
+        energy_diff = abs(energy_level - vibe_analysis['energy_level'])
+        energy_score = 1.0 - energy_diff
+        score += energy_score * 0.3  # Energy contributes 30% to score
+    
+    # Genre matching
+    track_genre = (track_doc.get('genre') or '').lower()
+    if vibe_analysis['genres'] and track_genre:
+        genre_match = any(genre in track_genre for genre in vibe_analysis['genres'])
+        if genre_match:
+            score += 0.4  # Genre match contributes 40% to score
+        else:
+            # Partial match for similar genres
+            similar_matches = 0
+            if 'hip-hop' in vibe_analysis['genres'] and any(word in track_genre for word in ['rap', 'hip hop']):
+                similar_matches += 1
+            if 'r&b' in vibe_analysis['genres'] and any(word in track_genre for word in ['soul', 'rnb']):
+                similar_matches += 1
+            if 'electronic' in vibe_analysis['genres'] and any(word in track_genre for word in ['dance', 'house', 'techno']):
+                similar_matches += 1
+            
+            if similar_matches > 0:
+                score += 0.2  # Partial genre match
+    elif not vibe_analysis['genres']:
+        score += 0.2  # No genre preference, give neutral score
+    
+    # Activity-based scoring
+    if vibe_analysis['activities']:
+        track_title = (track_doc.get('title', '') or '').lower()
+        track_artist = (track_doc.get('artist', '') or '').lower()
+        
+        for activity in vibe_analysis['activities']:
+            activity_boost = 0
+            if activity == 'workout' and bpm and bpm > 120:
+                activity_boost = 0.1
+            elif activity == 'study' and bpm and bpm < 100:
+                activity_boost = 0.1
+            elif activity == 'party' and bpm and bpm > 110:
+                activity_boost = 0.1
+            elif activity == 'relaxation' and bpm and bpm < 90:
+                activity_boost = 0.1
+            
+            score += activity_boost
+    
+    # Ensure score is between 0 and 1
+    return max(0.0, min(1.0, score))
 
 def run_mix_analysis():
     """Original main function logic for mix analysis"""

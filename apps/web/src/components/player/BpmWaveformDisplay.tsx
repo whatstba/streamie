@@ -26,7 +26,7 @@ const BpmWaveformDisplay: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [waveformData, setWaveformData] = useState<WaveformData | null>(null);
   const [canvasWidth, setCanvasWidth] = useState(800);
-  const [canvasHeight] = useState(150);
+  const [canvasHeight] = useState(100);
   const [isDragging, setIsDragging] = useState(false);
 
   // Load waveform data when track changes
@@ -203,18 +203,16 @@ const BpmWaveformDisplay: React.FC = () => {
 
   return (
     <div className="bg-zinc-900/50 rounded-xl p-4 border border-zinc-500/30">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-          📊 Waveform & BPM Analysis
-        </h3>
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-lg font-semibold text-white">Waveform</h3>
         <div className="flex items-center gap-4 text-sm">
           {sourceBpm && (
             <div className="text-blue-400 font-mono">
               {sourceBpm.toFixed(1)} BPM
             </div>
           )}
-          <div className="text-gray-400">
-            Shift+Click to add hot cue
+          <div className="text-gray-500 text-xs">
+            Shift+Click for cue
           </div>
         </div>
       </div>
@@ -234,37 +232,29 @@ const BpmWaveformDisplay: React.FC = () => {
         
         {!waveformData && (
           <div className="absolute inset-0 flex items-center justify-center bg-zinc-800/50 rounded-lg">
-            <div className="text-gray-400 animate-pulse">
+            <div className="text-gray-400 animate-pulse text-sm">
               Loading waveform...
             </div>
           </div>
         )}
       </div>
 
-      {/* BPM Analysis Info */}
+      {/* Compact BPM Info - only show when BPM is available */}
       {sourceBpm && (
-        <div className="mt-4 grid grid-cols-4 gap-4 text-sm">
-          <div className="bg-zinc-800/50 rounded-lg p-3">
-            <div className="text-gray-400 text-xs">Tempo</div>
-            <div className="text-white font-mono text-lg">{sourceBpm.toFixed(1)}</div>
-            <div className="text-gray-400 text-xs">BPM</div>
+        <div className="mt-3 flex items-center gap-4 text-xs text-gray-400">
+          <div>
+            <span className="text-gray-500">Beat Length:</span>{' '}
+            <span className="text-white font-mono">{(60 / sourceBpm).toFixed(2)}s</span>
           </div>
-          <div className="bg-zinc-800/50 rounded-lg p-3">
-            <div className="text-gray-400 text-xs">Beat Length</div>
-            <div className="text-white font-mono text-lg">{(60 / sourceBpm).toFixed(2)}</div>
-            <div className="text-gray-400 text-xs">Seconds</div>
+          <div>
+            <span className="text-gray-500">Total Beats:</span>{' '}
+            <span className="text-white font-mono">{Math.floor(duration * sourceBpm / 60)}</span>
           </div>
-          <div className="bg-zinc-800/50 rounded-lg p-3">
-            <div className="text-gray-400 text-xs">Total Beats</div>
-            <div className="text-white font-mono text-lg">{Math.floor(duration * sourceBpm / 60)}</div>
-            <div className="text-gray-400 text-xs">In Track</div>
-          </div>
-          <div className="bg-zinc-800/50 rounded-lg p-3">
-            <div className="text-gray-400 text-xs">Hot Cues</div>
-            <div className="text-white font-mono text-lg">
+          <div>
+            <span className="text-gray-500">Hot Cues:</span>{' '}
+            <span className="text-white font-mono">
               {currentTrack ? (hotCues[currentTrack.filepath] || []).length : 0}
-            </div>
-            <div className="text-gray-400 text-xs">Set</div>
+            </span>
           </div>
         </div>
       )}
