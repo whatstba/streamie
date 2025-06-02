@@ -18,6 +18,9 @@ from typing import List, Optional, Dict, Any
 import librosa
 import mimetypes
 
+# Import the AI router
+from routers.ai_router import router as ai_router
+
 # Create FastAPI app instance
 app = FastAPI(title="AI DJ Backend")
 
@@ -29,6 +32,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include the AI router
+app.include_router(ai_router)
 
 # Directory where music files are stored
 MUSIC_DIR = os.path.expanduser("~/Downloads")  # We'll use Downloads folder for testing

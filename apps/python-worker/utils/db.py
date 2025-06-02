@@ -1,7 +1,10 @@
 import os
+from urllib.parse import quote_plus
 from pymongo import MongoClient
 
-MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
+MONGODB_PASSWORD = os.getenv("MONGO_DB_PW", "")
+MONGODB_URI = f"mongodb+srv://lyn:{MONGODB_PASSWORD}@dev.5umbita.mongodb.net/?retryWrites=true&w=majority&appName=Dev"
+
 DATABASE_NAME = os.getenv("MONGODB_DB", "streamie")
 
 _client = None

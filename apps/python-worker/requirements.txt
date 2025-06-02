@@ -1,20 +1,29 @@
 spotipy
 requests
-python-dotenv
+python-dotenv==1.0.0
 openai
-librosa==0.10.1
-fastapi==0.104.1
-uvicorn==0.24.0
+librosa
+fastapi==0.101.0
+uvicorn[standard]==0.23.2
 pydantic==2.5.0
 python-multipart==0.0.6
 numpy
 scipy
 scikit-learn
-redis
-mutagen==1.47.0
+redis>=5.0.0
+mutagen
 debugpy
 soundfile==0.12.1
 youtube-dl==2021.12.17
 serato-tools==1.8.0
-pymongo==4.6.0
+pymongo
 essentia
+# New dependencies for LangGraph
+langgraph>=0.0.20
+langchain>=0.1.0
+langchain-openai>=0.0.5
+soundcloud-v2
+httpx
+asyncio
+# SQL dependencies
+sqlalchemy>=2.0.0
