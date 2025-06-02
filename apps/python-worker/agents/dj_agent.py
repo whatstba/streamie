@@ -195,7 +195,7 @@ def sort_tracks_by_bpm_progression(tracks: List[Dict], start_bpm: float, directi
 
 @tool
 def finalize_playlist(track_filepaths: List[str], mixing_notes: Optional[List[str]] = None) -> Dict:
-    """Finalize the playlist with selected tracks and optional mixing notes.
+    """Finalize the playlist with selected tracks and mixing notes.
     
     Args:
         track_filepaths: List of track filepaths for the final playlist
@@ -209,13 +209,34 @@ def finalize_playlist(track_filepaths: List[str], mixing_notes: Optional[List[st
     if not track_filepaths:
         return {"success": False, "error": "No tracks provided"}
     
+    # Remove duplicates while preserving order
+    seen = set()
+    unique_filepaths = []
+    duplicate_indices = []
+    
+    for i, filepath in enumerate(track_filepaths):
+        if filepath not in seen:
+            seen.add(filepath)
+            unique_filepaths.append(filepath)
+        else:
+            duplicate_indices.append(i)
+            logger.warning(f"⚠️ Duplicate track found at position {i+1}: {filepath}")
+    
+    # Adjust mixing notes if we removed duplicates
+    if mixing_notes and duplicate_indices:
+        unique_mixing_notes = []
+        for i, note in enumerate(mixing_notes):
+            if i not in duplicate_indices:
+                unique_mixing_notes.append(note)
+        mixing_notes = unique_mixing_notes
+    
     # Ensure mixing_notes matches track count
-    if mixing_notes and len(mixing_notes) != len(track_filepaths):
+    if mixing_notes and len(mixing_notes) != len(unique_filepaths):
         mixing_notes = None
-        logger.warning("Mixing notes count doesn't match tracks, ignoring notes")
+        logger.warning("Mixing notes count doesn't match tracks after removing duplicates, ignoring notes")
     
     playlist = []
-    for i, filepath in enumerate(track_filepaths):
+    for i, filepath in enumerate(unique_filepaths):
         track_entry = {
             "filepath": filepath,
             "order": i + 1,
@@ -224,17 +245,22 @@ def finalize_playlist(track_filepaths: List[str], mixing_notes: Optional[List[st
         playlist.append(track_entry)
         logger.debug(f"   {i+1}. {filepath}")
     
-    logger.info(f"✅ Playlist finalized successfully")
+    if len(unique_filepaths) < len(track_filepaths):
+        logger.info(f"✅ Playlist finalized with {len(playlist)} unique tracks (removed {len(track_filepaths) - len(unique_filepaths)} duplicates)")
+    else:
+        logger.info(f"✅ Playlist finalized successfully")
+    
     return {
         "success": True,
         "playlist": playlist,
-        "track_count": len(playlist)
+        "track_count": len(playlist),
+        "duplicates_removed": len(track_filepaths) - len(unique_filepaths)
     }
 
 class DJAgent:
     """LangGraph agent for DJ playlist and vibe management."""
     
-    def __init__(self, llm_model: str = "o4-mini"):
+    def __init__(self, llm_model: str = "gpt-4.1"):
         logger.info(f"🚀 Initializing DJAgent with model: {llm_model}")
         self.db = get_sqlite_db()
         self.llm = ChatOpenAI(model=llm_model, temperature=1)
@@ -326,7 +352,30 @@ class DJAgent:
         """Format the final response."""
         messages = state["messages"]
         final_response = messages[-1].content if messages else "No response generated"
-        return {"final_response": final_response}
+        
+        # Extract finalized playlist from tool responses
+        finalized_playlist = None
+        
+        # Look through messages for tool call results
+        for msg in reversed(messages):  # Start from most recent
+            if hasattr(msg, 'content') and isinstance(msg.content, str):
+                try:
+                    # Check if this is a tool response containing our playlist
+                    if '"success": true' in msg.content and '"playlist":' in msg.content:
+                        import json
+                        # Try to parse the tool response
+                        tool_result = json.loads(msg.content)
+                        if tool_result.get("success") and tool_result.get("playlist"):
+                            finalized_playlist = tool_result["playlist"]
+                            logger.info(f"📋 Extracted finalized playlist with {len(finalized_playlist)} tracks from tool response")
+                            break
+                except:
+                    continue
+        
+        return {
+            "final_response": final_response,
+            "finalized_playlist": finalized_playlist
+        }
         
     def _build_graph(self) -> StateGraph:
         """Build the LangGraph workflow."""
@@ -1011,9 +1060,11 @@ What track should I play after {current_track}?"""
             3. Filter by energy levels using filter_tracks_by_energy if needed
             4. Sort tracks for smooth BPM progression using sort_tracks_by_bpm_progression
 
-            IMPORTANT: After selecting your tracks, you MUST call the finalize_playlist tool with:
-            - A list of track filepaths (exactly {length} tracks)
-            - Mixing notes for each track explaining why it fits and how to mix it
+            IMPORTANT: 
+            - Select UNIQUE tracks only - do not include the same track multiple times
+            - After selecting your tracks, you MUST call the finalize_playlist tool with:
+              * A list of track filepaths (exactly {length} UNIQUE tracks)
+              * Mixing notes for each track explaining why it fits and how to mix it
 
             The finalize_playlist tool is required to complete the playlist creation."""
 
@@ -1045,25 +1096,13 @@ What track should I play after {current_track}?"""
             response_text = result.get("final_response", "")
             logger.info(f"✅ Agent response generated")
             
-            # Check if we have a finalized playlist from tool calls
-            finalized_playlist = None
-            messages = result.get("messages", [])
+            # Get the finalized playlist directly from the result
+            finalized_playlist = result.get("finalized_playlist")
             
-            # Look through messages for tool call results
-            for msg in messages:
-                if hasattr(msg, 'content') and isinstance(msg.content, str):
-                    try:
-                        # Check if this is a tool response containing our playlist
-                        if '"success": true' in msg.content and '"playlist":' in msg.content:
-                            import json
-                            # Try to parse the tool response
-                            tool_result = json.loads(msg.content)
-                            if tool_result.get("success") and tool_result.get("playlist"):
-                                finalized_playlist = tool_result["playlist"]
-                                logger.info(f"📋 Found finalized playlist with {len(finalized_playlist)} tracks")
-                                break
-                    except:
-                        continue
+            if finalized_playlist:
+                logger.info(f"📋 Found finalized playlist with {len(finalized_playlist)} tracks")
+            else:
+                logger.warning("⚠️ No finalized playlist found in result")
             
             logger.info("=" * 50)
             
