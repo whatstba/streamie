@@ -2,13 +2,6 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { useAudioPlayer } from '@/context/AudioPlayerContext';
-import { musicService } from '@/services/musicService';
-
-interface WaveformData {
-  waveform: number[];
-  sample_rate: number;
-  hop_length: number;
-}
 
 const BpmWaveformDisplay: React.FC = () => {
   const {
@@ -24,30 +17,9 @@ const BpmWaveformDisplay: React.FC = () => {
   } = useAudioPlayer();
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [waveformData, setWaveformData] = useState<WaveformData | null>(null);
   const [canvasWidth, setCanvasWidth] = useState(800);
   const [canvasHeight] = useState(100);
   const [isDragging, setIsDragging] = useState(false);
-
-  // Load waveform data when track changes
-  useEffect(() => {
-    const loadWaveform = async () => {
-      if (!currentTrack) {
-        setWaveformData(null);
-        return;
-      }
-
-      try {
-        const data = await musicService.getWaveform(currentTrack.filepath);
-        setWaveformData(data);
-      } catch (error) {
-        console.error('Failed to load waveform:', error);
-        setWaveformData(null);
-      }
-    };
-
-    loadWaveform();
-  }, [currentTrack]);
 
   // Canvas resize handler
   useEffect(() => {
@@ -65,10 +37,10 @@ const BpmWaveformDisplay: React.FC = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Draw waveform and indicators
+  // Draw simplified waveform visualization (no API calls)
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas || !waveformData || !duration) return;
+    if (!canvas || !duration) return;
 
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
@@ -81,23 +53,16 @@ const BpmWaveformDisplay: React.FC = () => {
     ctx.fillStyle = '#0f0f0f';
     ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
-    // Draw waveform
-    const waveform = waveformData.waveform;
-    const barWidth = canvasWidth / waveform.length;
-    const maxAmplitude = Math.max(...waveform);
-
-    ctx.fillStyle = '#3b82f6';
-    for (let i = 0; i < waveform.length; i++) {
-      const x = i * barWidth;
-      const amplitude = waveform[i] / maxAmplitude;
-      const barHeight = amplitude * (canvasHeight * 0.8);
-      const y = (canvasHeight - barHeight) / 2;
-      
-      ctx.fillRect(x, y, Math.max(1, barWidth - 1), barHeight);
-    }
+    // Draw simplified progress bar background
+    ctx.fillStyle = '#374151';
+    ctx.fillRect(0, canvasHeight * 0.4, canvasWidth, canvasHeight * 0.2);
 
     // Draw progress indicator
     const progressX = (currentTime / duration) * canvasWidth;
+    ctx.fillStyle = '#3b82f6';
+    ctx.fillRect(0, canvasHeight * 0.4, progressX, canvasHeight * 0.2);
+
+    // Draw playhead
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 2;
     ctx.beginPath();
@@ -164,7 +129,7 @@ const BpmWaveformDisplay: React.FC = () => {
       ctx.fillText(timeText, x - 15, canvasHeight - 5);
     });
 
-  }, [waveformData, currentTime, duration, canvasWidth, sourceBpm, hotCues, currentTrack]);
+  }, [currentTime, duration, canvasWidth, sourceBpm, hotCues, currentTrack]);
 
   const handleCanvasClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
     if (!duration || !canvasRef.current) return;
@@ -204,7 +169,7 @@ const BpmWaveformDisplay: React.FC = () => {
   return (
     <div className="bg-zinc-900/50 rounded-xl p-4 border border-zinc-500/30">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-lg font-semibold text-white">Waveform</h3>
+        <h3 className="text-lg font-semibold text-white">Beat Grid</h3>
         <div className="flex items-center gap-4 text-sm">
           {sourceBpm && (
             <div className="text-blue-400 font-mono">
@@ -229,14 +194,6 @@ const BpmWaveformDisplay: React.FC = () => {
           onMouseUp={() => setIsDragging(false)}
           onMouseLeave={() => setIsDragging(false)}
         />
-        
-        {!waveformData && (
-          <div className="absolute inset-0 flex items-center justify-center bg-zinc-800/50 rounded-lg">
-            <div className="text-gray-400 animate-pulse text-sm">
-              Loading waveform...
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Compact BPM Info - only show when BPM is available */}

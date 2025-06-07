@@ -39,6 +39,7 @@ export default function Home() {
   const [vibeInput, setVibeInput] = useState('');
   const [generatingPlaylist, setGeneratingPlaylist] = useState(false);
   const [generatedPlaylist, setGeneratedPlaylist] = useState<Track[]>([]);
+  const [aiThinkingMessages, setAiThinkingMessages] = useState<string[]>([]);
   
   // Use audio player context
   const { 
@@ -142,28 +143,43 @@ export default function Home() {
     if (!vibeInput.trim()) return;
     
     setGeneratingPlaylist(true);
+    setAiThinkingMessages([]);
+    setGeneratedPlaylist([]);
+    
     try {
-      const response = await fetch('http://localhost:8000/ai/generate-vibe-playlist', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+      const eventSource = new EventSource(
+        `http://localhost:8000/ai/generate-vibe-playlist-stream?${new URLSearchParams({
           vibe_description: vibeInput.trim(),
-          playlist_length: 10
-        }),
-      });
+          playlist_length: '10'
+        })}`
+      );
 
-      if (!response.ok) {
-        throw new Error(`Failed to generate playlist: ${response.statusText}`);
-      }
+      eventSource.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        
+        if (data.type === 'thinking' || data.type === 'status') {
+          setAiThinkingMessages(prev => [...prev, data.message]);
+        } else if (data.type === 'complete') {
+          setGeneratedPlaylist(data.playlist || []);
+          setGeneratingPlaylist(false);
+          eventSource.close();
+        } else if (data.type === 'error') {
+          setError(data.message);
+          setGeneratingPlaylist(false);
+          eventSource.close();
+        }
+      };
 
-      const data = await response.json();
-      setGeneratedPlaylist(data.playlist || []);
+      eventSource.onerror = (error) => {
+        console.error('EventSource error:', error);
+        setError('Failed to generate playlist. Make sure the AI service is running.');
+        setGeneratingPlaylist(false);
+        eventSource.close();
+      };
+
     } catch (err) {
       console.error('Error generating playlist:', err);
       setError('Failed to generate playlist. Make sure the AI service is running.');
-    } finally {
       setGeneratingPlaylist(false);
     }
   };
@@ -183,13 +199,7 @@ export default function Home() {
       <div className="space-y-8">
         {/* Header */}
         <div className="flex items-center justify-between">
-          <h1 className="text-3xl font-bold">AI DJ Session</h1>
-          <div className="flex items-center gap-4">
-            <div className="px-4 py-2 bg-purple-500 rounded-full flex items-center gap-2">
-              <SparklesIcon className="h-5 w-5" />
-              <span>Current Mode: {djMode ? 'DJ Auto-Mix' : 'Manual Mode'}</span>
-            </div>
-          </div>
+          <h1 className="text-3xl font-bold">Current Session</h1>
         </div>
 
         {/* Vibe-Based Playlist Generator */}
@@ -212,6 +222,7 @@ export default function Home() {
                 placeholder="Enter your desired vibe..."
                 className="w-full px-4 py-3 bg-black/30 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:border-purple-500 focus:outline-none"
                 onKeyPress={(e) => e.key === 'Enter' && handleGenerateVibePlaylist()}
+                disabled={generatingPlaylist}
               />
             </div>
             
@@ -224,8 +235,26 @@ export default function Home() {
             </button>
           </div>
 
+          {/* AI Thinking Process Display */}
+          {generatingPlaylist && aiThinkingMessages.length > 0 && (
+            <div className="mt-6 p-4 bg-black/40 rounded-lg border border-purple-500/20">
+              <h4 className="font-medium text-sm text-purple-400 mb-3">AI DJ is thinking...</h4>
+              <div className="space-y-1 max-h-48 overflow-y-auto text-xs font-mono">
+                {aiThinkingMessages.map((message, index) => (
+                  <div 
+                    key={index} 
+                    className="text-gray-300 animate-fadeIn"
+                    style={{ animationDelay: `${index * 0.1}s` }}
+                  >
+                    {message}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Generated Playlist */}
-          {generatedPlaylist.length > 0 && (
+          {!generatingPlaylist && generatedPlaylist.length > 0 && (
             <div className="mt-6 p-4 bg-black/20 rounded-lg">
               <div className="flex items-center justify-between mb-4">
                 <h4 className="font-medium text-lg">Generated Playlist ({generatedPlaylist.length} tracks)</h4>
@@ -265,7 +294,7 @@ export default function Home() {
           )}
         </div>
 
-        {/* Combined DJ Controls and Waveform Display */}
+        {/* Combined DJ Controls and Beat Grid Display */}
         {djMode && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <DjModeControls />
@@ -275,90 +304,6 @@ export default function Home() {
 
         {/* Advanced DJ Controls - Collapsible */}
         <AdvancedDjControls />
-
-        {/* Selected Track Info */}
-        {displayTrack && (
-          <div className={`border rounded-xl p-6 ${
-            currentTrack 
-              ? 'bg-purple-900/20 border-purple-500/30' 
-              : 'bg-zinc-900/20 border-zinc-500/30'
-          }`}>
-            <div className="flex gap-6">
-              {displayTrack.has_artwork ? (
-                <div className="w-32 h-32 rounded-lg overflow-hidden bg-zinc-800 relative">
-                  <Image
-                    src={musicService.getArtworkUrl(displayTrack.filepath)}
-                    alt={displayTrack.album || 'Album artwork'}
-                    fill
-                    className="object-cover"
-                    onError={(e) => {
-                      // Hide image on error
-                      const target = e.target as HTMLImageElement;
-                      target.style.display = 'none';
-                    }}
-                  />
-                </div>
-              ) : (
-                <div className="w-32 h-32 rounded-lg bg-zinc-800 flex items-center justify-center text-4xl text-gray-600">
-                  ♪
-                </div>
-              )}
-              <div className="flex-1">
-                <div className="flex items-center gap-3 mb-2">
-                  <h2 className="text-xl font-semibold">
-                    {currentTrack ? 'Now Playing' : 'Selected Track'}
-                  </h2>
-                  {djMode && currentTrack && (
-                    <div className="flex items-center gap-2">
-                      <span className="px-2 py-1 bg-purple-600 rounded text-xs text-white">
-                        DJ MODE
-                      </span>
-                      {isTransitioning && (
-                        <span className="px-2 py-1 bg-orange-600 rounded text-xs text-white animate-pulse">
-                          MIXING
-                        </span>
-                      )}
-                    </div>
-                  )}
-                </div>
-                <p className="text-lg font-medium">{displayTrack.title || displayTrack.filename}</p>
-                <p className="text-gray-400">
-                  {displayTrack.artist || 'Unknown Artist'} 
-                  {displayTrack.album && ` • ${displayTrack.album}`}
-                  {displayTrack.year && ` • ${displayTrack.year}`}
-                </p>
-                <p className="text-sm text-gray-500 mt-1">
-                  {formatDuration(displayTrack.duration)}
-                  {displayTrack.genre && ` • ${displayTrack.genre}`}
-                </p>
-                
-                {analyzing && (
-                  <div className="mt-4">
-                    <p className="text-yellow-400 animate-pulse">🎵 Analyzing beat pattern...</p>
-                  </div>
-                )}
-                
-                {analysis && !analyzing && (
-                  <div className="mt-4">
-                    <p className="text-green-400">✓ Beat analysis complete</p>
-                    <p className="text-sm text-gray-400">
-                      Tempo: {analysis.bpm.toFixed(2)} BPM 
-                    </p>
-                  </div>
-                )}
-
-                {/* Show next track in DJ mode */}
-                {djMode && upcomingTrack && (
-                  <div className="mt-4 p-3 bg-orange-900/20 border border-orange-500/30 rounded-lg">
-                    <p className="text-xs text-orange-400 font-medium mb-1">NEXT UP:</p>
-                    <p className="text-sm font-medium">{upcomingTrack.title || upcomingTrack.filename}</p>
-                    <p className="text-xs text-gray-400">{upcomingTrack.artist || 'Unknown Artist'}</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Music Library */}
         <div className="bg-zinc-900/50 rounded-xl p-6">

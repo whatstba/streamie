@@ -25,7 +25,7 @@ const QueueManager: React.FC = () => {
     playTrack,
     removeFromQueue,
     clearQueue,
-    moveTrackInQueue,
+    moveQueueItem,
   } = useAudioPlayer();
 
   const [isOpen, setIsOpen] = useState(false);
@@ -50,7 +50,7 @@ const QueueManager: React.FC = () => {
   const handleDrop = (e: React.DragEvent, dropIndex: number) => {
     e.preventDefault();
     if (draggedIndex !== null && draggedIndex !== dropIndex) {
-      moveTrackInQueue(draggedIndex, dropIndex);
+      moveQueueItem(draggedIndex, dropIndex);
     }
     setDraggedIndex(null);
   };
@@ -61,13 +61,13 @@ const QueueManager: React.FC = () => {
 
   const handleMoveUp = (index: number) => {
     if (index > 0) {
-      moveTrackInQueue(index, index - 1);
+      moveQueueItem(index, index - 1);
     }
   };
 
   const handleMoveDown = (index: number) => {
     if (index < queue.length - 1) {
-      moveTrackInQueue(index, index + 1);
+      moveQueueItem(index, index + 1);
     }
   };
 

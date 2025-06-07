@@ -1,33 +1,26 @@
 'use client';
 
 import React, { useState } from 'react';
-import { SparklesIcon } from '@heroicons/react/24/solid';
+import { ForwardIcon } from '@heroicons/react/24/outline';
 import { useAudioPlayer } from '@/context/AudioPlayerContext';
 import AudioControls from './AudioControls';
 import ProgressBar from './ProgressBar';
 import VolumeControl from './VolumeControl';
-import CurrentTrackInfo from './CurrentTrackInfo';
 import KeyboardShortcutsHelp from './KeyboardShortcutsHelp';
 import QueueManager from './QueueManager';
 
 const Player = () => {
-  const [aiPrompt, setAiPrompt] = useState('');
   const { 
     currentTrack, 
     djMode, 
     isTransitioning, 
     transitionProgress,
-    timeUntilTransition 
+    timeUntilTransition,
+    autoTransition,
+    setAutoTransition,
+    forceTransition,
+    nextTrack
   } = useAudioPlayer();
-
-  const handleAiSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (aiPrompt.trim()) {
-      // TODO: Implement AI DJ functionality
-      console.log('AI Prompt:', aiPrompt);
-      setAiPrompt('');
-    }
-  };
 
   const formatTime = (seconds: number): string => {
     if (seconds <= 0) return '';
@@ -49,16 +42,29 @@ const Player = () => {
       )}
 
       <div className="max-w-screen-xl mx-auto h-full flex items-center justify-between gap-6">
-        {/* Currently Playing */}
+        {/* Left Side - Mix Controls */}
         <div className="flex-1 min-w-0 max-w-sm">
-          <CurrentTrackInfo />
+          <div className="flex items-center gap-3">
+            {/*   */}
+            
+            {nextTrack && !isTransitioning && (
+              <button
+                onClick={forceTransition}
+                className="flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-sm font-medium transition"
+                title="Force transition now"
+              >
+                <ForwardIcon className="h-4 w-4" />
+                Mix Now
+              </button>
+            )}
+          </div>
           
           {/* DJ Mode Status */}
           {djMode && (
-            <div className="mt-1 flex items-center gap-2 text-xs">
-              <span className="px-2 py-0.5 bg-purple-600 rounded text-white font-medium">
+            <div className="mt-2 flex items-center gap-2 text-xs">
+              {/* <span className="px-2 py-0.5 bg-purple-600 rounded text-white font-medium">
                 DJ MODE
-              </span>
+              </span> */}
               {isTransitioning && (
                 <span className="text-purple-400 animate-pulse">
                   Crossfading... {Math.round(transitionProgress * 100)}%
@@ -84,25 +90,6 @@ const Player = () => {
           <VolumeControl />
           <QueueManager />
           <KeyboardShortcutsHelp />
-          
-          <div className="relative">
-            <form onSubmit={handleAiSubmit}>
-              <input
-                type="text"
-                placeholder="Tell AI DJ to change the vibe..."
-                value={aiPrompt}
-                onChange={(e) => setAiPrompt(e.target.value)}
-                className="w-64 px-4 py-2 rounded-full bg-zinc-800 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 text-white placeholder-gray-400"
-              />
-              <button 
-                type="submit"
-                disabled={!aiPrompt.trim()}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-purple-500 hover:text-purple-400 transition disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <SparklesIcon className="h-5 w-5" />
-              </button>
-            </form>
-          </div>
         </div>
       </div>
     </div>

@@ -42,12 +42,6 @@ interface TrackAnalysis {
   hot_cues?: SeratoHotCue[];
 }
 
-interface WaveformData {
-  waveform: number[];
-  sample_rate: number;
-  hop_length: number;
-}
-
 const API_BASE_URL = 'http://localhost:8000';
 
 export const musicService = {
@@ -115,14 +109,6 @@ export const musicService = {
     return enrichedTracks.map((result, index) => 
       result.status === 'fulfilled' ? result.value : tracks[index]
     );
-  },
-
-  async getWaveform(filepath: string): Promise<WaveformData> {
-    const response = await fetch(`${API_BASE_URL}/track/${encodeURIComponent(filepath)}/waveform`);
-    if (!response.ok) {
-      throw new Error('Failed to fetch waveform');
-    }
-    return response.json();
   },
 
   getArtworkUrl(filepath: string): string {
