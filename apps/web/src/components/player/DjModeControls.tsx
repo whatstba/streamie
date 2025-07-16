@@ -1,12 +1,12 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   MusicalNoteIcon,
   Cog6ToothIcon,
-  PlayIcon,
-  PauseIcon,
   ForwardIcon,
+  ClockIcon,
+  MusicalNoteIcon as TrackIcon,
 } from '@heroicons/react/24/outline';
 import { useAudioPlayer } from '@/context/AudioPlayerContext';
 
@@ -14,14 +14,19 @@ const DjModeControls: React.FC = () => {
   const {
     djMode,
     autoTransition,
+    mixInterval,
+    mixMode,
     transitionTime,
     crossfadeDuration,
     isTransitioning,
     transitionProgress,
     nextTrack,
     timeUntilTransition,
+    currentTime,
     toggleDjMode,
     setAutoTransition,
+    setMixInterval,
+    setMixMode,
     setTransitionTime,
     setCrossfadeDuration,
     forceTransition,
@@ -35,6 +40,14 @@ const DjModeControls: React.FC = () => {
     const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
+
+  // Preset intervals for quick selection
+  const intervalPresets = [
+    { label: '30s', value: 30 },
+    { label: '45s', value: 45 },
+    { label: '60s', value: 60 },
+    { label: '90s', value: 90 },
+  ];
 
   if (!djMode) {
     return null;
@@ -77,29 +90,111 @@ const DjModeControls: React.FC = () => {
         </div>
       </div>
 
+      {/* Mix Mode Toggle */}
+      <div className="mb-4">
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-sm text-gray-400">Mix Mode:</span>
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setMixMode('interval')}
+            className={`flex items-center gap-2 px-3 py-2 rounded text-sm font-medium transition ${
+              mixMode === 'interval'
+                ? 'bg-blue-600 text-white'
+                : 'bg-zinc-700 text-gray-300 hover:bg-zinc-600'
+            }`}
+          >
+            <ClockIcon className="h-4 w-4" />
+            Fixed Interval
+          </button>
+          <button
+            onClick={() => setMixMode('track-end')}
+            className={`flex items-center gap-2 px-3 py-2 rounded text-sm font-medium transition ${
+              mixMode === 'track-end'
+                ? 'bg-blue-600 text-white'
+                : 'bg-zinc-700 text-gray-300 hover:bg-zinc-600'
+            }`}
+          >
+            <TrackIcon className="h-4 w-4" />
+            Track End
+          </button>
+        </div>
+      </div>
+
+      {/* Interval Presets (for interval mode) */}
+      {mixMode === 'interval' && (
+        <div className="mb-4">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-sm text-gray-400">Mix Every:</span>
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            {intervalPresets.map((preset) => (
+              <button
+                key={preset.value}
+                onClick={() => setMixInterval(preset.value)}
+                className={`px-3 py-1 rounded text-sm font-medium transition ${
+                  mixInterval === preset.value
+                    ? 'bg-purple-600 text-white'
+                    : 'bg-zinc-700 text-gray-300 hover:bg-zinc-600'
+                }`}
+              >
+                {preset.label}
+              </button>
+            ))}
+          </div>
+          <div className="mt-2 text-xs text-gray-500">
+            Next mix in: {formatTime(timeUntilTransition)}
+          </div>
+        </div>
+      )}
+
       {/* DJ Settings Panel */}
       {showSettings && (
         <div className="bg-zinc-800/50 rounded-lg p-4 space-y-4 mb-4">
-          <div className="grid grid-cols-2 gap-4">
-            {/* Transition Time */}
-            <div>
-              <label className="block text-xs text-gray-400 mb-2">
-                Transition Time (seconds before end)
-              </label>
-              <input
-                type="range"
-                min="5"
-                max="60"
-                value={transitionTime}
-                onChange={(e) => setTransitionTime(Number(e.target.value))}
-                className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"
-              />
-              <div className="flex justify-between text-xs text-gray-500 mt-1">
-                <span>5s</span>
-                <span className="font-medium text-white">{transitionTime}s</span>
-                <span>60s</span>
+          <div className="grid grid-cols-1 gap-4">
+            {/* Mix Interval Slider (for interval mode) */}
+            {mixMode === 'interval' && (
+              <div>
+                <label className="block text-xs text-gray-400 mb-2">
+                  Mix Interval (seconds)
+                </label>
+                <input
+                  type="range"
+                  min="15"
+                  max="120"
+                  value={mixInterval}
+                  onChange={(e) => setMixInterval(Number(e.target.value))}
+                  className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"
+                />
+                <div className="flex justify-between text-xs text-gray-500 mt-1">
+                  <span>15s</span>
+                  <span className="font-medium text-white">{mixInterval}s</span>
+                  <span>2min</span>
+                </div>
               </div>
-            </div>
+            )}
+
+            {/* Transition Time Slider (for track-end mode) */}
+            {mixMode === 'track-end' && (
+              <div>
+                <label className="block text-xs text-gray-400 mb-2">
+                  Transition Time (seconds before end)
+                </label>
+                <input
+                  type="range"
+                  min="5"
+                  max="60"
+                  value={transitionTime}
+                  onChange={(e) => setTransitionTime(Number(e.target.value))}
+                  className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer"
+                />
+                <div className="flex justify-between text-xs text-gray-500 mt-1">
+                  <span>5s</span>
+                  <span className="font-medium text-white">{transitionTime}s</span>
+                  <span>60s</span>
+                </div>
+              </div>
+            )}
 
             {/* Crossfade Duration */}
             <div>
@@ -147,7 +242,7 @@ const DjModeControls: React.FC = () => {
             <span className="text-sm text-gray-400">Next Track</span>
             {autoTransition && timeUntilTransition > 0 && (
               <span className="text-sm text-orange-400">
-                Auto-mix in {formatTime(timeUntilTransition)}
+                {mixMode === 'interval' ? 'Mix' : 'Transition'} in {formatTime(timeUntilTransition)}
               </span>
             )}
           </div>

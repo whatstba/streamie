@@ -23,7 +23,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DB_PATH = os.path.join(os.path.dirname(__file__), '..', 'tracks.db')
 
 
-class TrackQuery:
+class DeprecatedTrackQuery:
     """Query interface for the tracks database."""
     
     def __init__(self, db_path: str = DB_PATH):

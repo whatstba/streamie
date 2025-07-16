@@ -260,7 +260,7 @@ def finalize_playlist(track_filepaths: List[str], mixing_notes: Optional[List[st
 class DJAgent:
     """LangGraph agent for DJ playlist and vibe management."""
     
-    def __init__(self, llm_model: str = "gpt-4.1"):
+    def __init__(self, llm_model: str = "o4-mini"):
         logger.info(f"🚀 Initializing DJAgent with model: {llm_model}")
         self.db = get_sqlite_db()
         self.llm = ChatOpenAI(model=llm_model, temperature=1)

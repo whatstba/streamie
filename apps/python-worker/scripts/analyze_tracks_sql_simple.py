@@ -39,7 +39,7 @@ DB_PATH = os.path.join(os.path.dirname(__file__), '..', 'tracks.db')
 MUSIC_DIR = os.getenv('MUSIC_DIR', '/Users/lynscott/Music')
 
 
-class TrackDatabase:
+class DeprecatedTrackDatabase:
     """SQLite database manager for track analysis data."""
     
     def __init__(self, db_path: str = DB_PATH):
