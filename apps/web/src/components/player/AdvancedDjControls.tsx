@@ -2,6 +2,7 @@
 
 import React, { useState, useRef } from 'react';
 import { useAudioPlayer } from '@/context/AudioPlayerContext';
+import BpmWaveformDisplay from '@/components/player/BpmWaveformDisplay';
 import {
   MusicalNoteIcon,
   AdjustmentsHorizontalIcon,
@@ -342,6 +343,17 @@ const AdvancedDjControls: React.FC = () => {
                   )}
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* Beat Grid Visualization */}
+          {currentTrack && (
+            <div className="mt-6">
+              <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
+                <ArrowsRightLeftIcon className="h-5 w-5 text-blue-400" />
+                Beat Grid
+              </h3>
+              <BpmWaveformDisplay />
             </div>
           )}
         </div>

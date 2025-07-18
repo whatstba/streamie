@@ -46,8 +46,227 @@ class DJAgentState(TypedDict):
     vibe_description: Optional[str]
     final_response: Optional[str]
     finalized_playlist: Optional[List[Dict]]
+    transition_plan: Optional[Dict]  # New: Hot cue transition planning
+    hot_cue_analysis: Optional[Dict]  # New: Hot cue compatibility analysis
 
 # Define tools for the agentic approach
+
+@tool
+def analyze_hot_cue_transitions(track_filepaths: List[str]) -> Dict:
+    """Analyze hot cue compatibility for transitions between consecutive tracks."""
+    try:
+        from utils.serato_reader import serato_reader
+        import json
+        
+        logger.info(f"🎛️ Analyzing hot cue transitions for {len(track_filepaths)} tracks")
+        
+        transition_analysis = {
+            "transitions": [],
+            "total_tracks": len(track_filepaths),
+            "tracks_with_hot_cues": 0,
+            "optimal_transitions": 0,
+            "recommendations": []
+        }
+        
+        # Get database connection for full file paths
+        db_path = os.path.join(os.path.dirname(__file__), '..', 'tracks.db')
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        # Analyze each consecutive pair of tracks
+        for i in range(len(track_filepaths) - 1):
+            current_filepath = track_filepaths[i]
+            next_filepath = track_filepaths[i + 1]
+            
+            logger.info(f"Analyzing transition {i+1}: {current_filepath} -> {next_filepath}")
+            
+            # Get full track data including BPM
+            cursor.execute("SELECT * FROM tracks WHERE filepath = ?", (current_filepath,))
+            current_track_data = cursor.fetchone()
+            
+            cursor.execute("SELECT * FROM tracks WHERE filepath = ?", (next_filepath,))
+            next_track_data = cursor.fetchone()
+            
+            if not current_track_data or not next_track_data:
+                logger.warning(f"Missing track data for transition {i+1}")
+                continue
+            
+            # Convert to dict
+            columns = [description[0] for description in cursor.description]
+            current_track = dict(zip(columns, current_track_data))
+            next_track = dict(zip(columns, next_track_data))
+            
+            # Get hot cue data from Serato
+            try:
+                # Construct full file paths - use environment variable or default
+                music_dir = os.environ.get('MUSIC_DIR', os.path.expanduser("~/Downloads"))
+                current_full_path = os.path.join(music_dir, current_filepath)
+                next_full_path = os.path.join(music_dir, next_filepath)
+                
+                current_serato_info = serato_reader.get_serato_info(current_full_path)
+                next_serato_info = serato_reader.get_serato_info(next_full_path)
+                
+                current_hot_cues = current_serato_info.get('hot_cues', [])
+                next_hot_cues = next_serato_info.get('hot_cues', [])
+                
+                if current_hot_cues:
+                    transition_analysis["tracks_with_hot_cues"] += 1
+                if next_hot_cues and i == len(track_filepaths) - 2:  # Count last track too
+                    transition_analysis["tracks_with_hot_cues"] += 1
+                
+                # Analyze transition compatibility
+                transition_info = analyze_transition_compatibility(
+                    current_track, next_track, current_hot_cues, next_hot_cues
+                )
+                
+                transition_analysis["transitions"].append({
+                    "position": i + 1,
+                    "current_track": {
+                        "filepath": current_filepath,
+                        "title": current_track.get('title', 'Unknown'),
+                        "artist": current_track.get('artist', 'Unknown'),
+                        "bpm": current_track.get('bpm'),
+                        "hot_cues_count": len(current_hot_cues)
+                    },
+                    "next_track": {
+                        "filepath": next_filepath,
+                        "title": next_track.get('title', 'Unknown'),
+                        "artist": next_track.get('artist', 'Unknown'),
+                        "bpm": next_track.get('bpm'),
+                        "hot_cues_count": len(next_hot_cues)
+                    },
+                    "compatibility": transition_info
+                })
+                
+                if transition_info.get("score", 0) > 0.6:
+                    transition_analysis["optimal_transitions"] += 1
+                    
+            except Exception as e:
+                logger.error(f"Error analyzing hot cues for transition {i+1}: {e}")
+                continue
+        
+        cursor.close()
+        conn.close()
+        
+        # Generate recommendations
+        optimal_ratio = transition_analysis["optimal_transitions"] / max(1, len(transition_analysis["transitions"]))
+        
+        if optimal_ratio > 0.7:
+            transition_analysis["recommendations"].append("Excellent hot cue coverage! Most transitions will be smooth.")
+        elif optimal_ratio > 0.4:
+            transition_analysis["recommendations"].append("Good hot cue coverage. Some transitions may need manual adjustment.")
+        else:
+            transition_analysis["recommendations"].append("Limited hot cue data. Consider using BPM-based transitions as fallback.")
+        
+        if transition_analysis["tracks_with_hot_cues"] < len(track_filepaths) * 0.5:
+            transition_analysis["recommendations"].append("Consider tracks with more Serato hot cue data for better transitions.")
+        
+        logger.info(f"✅ Hot cue analysis complete: {transition_analysis['optimal_transitions']}/{len(transition_analysis['transitions'])} optimal transitions")
+        return transition_analysis
+        
+    except Exception as e:
+        logger.error(f"Error in hot cue analysis: {e}")
+        return {"error": str(e), "transitions": []}
+
+def analyze_transition_compatibility(current_track: Dict, next_track: Dict, current_hot_cues: List[Dict], next_hot_cues: List[Dict]) -> Dict:
+    """Analyze compatibility between two tracks for transition planning."""
+    compatibility = {
+        "score": 0.0,
+        "bpm_compatible": False,
+        "hot_cue_compatible": False,
+        "recommended_effects": [],
+        "optimal_outro_cue": None,
+        "optimal_intro_cue": None,
+        "notes": []
+    }
+    
+    # BPM compatibility analysis
+    current_bpm = current_track.get('bpm')
+    next_bpm = next_track.get('bpm')
+    
+    if current_bpm and next_bpm:
+        bpm_diff = abs(current_bpm - next_bpm)
+        if bpm_diff <= 5:
+            compatibility["score"] += 0.3
+            compatibility["bpm_compatible"] = True
+            compatibility["notes"].append(f"Excellent BPM match ({current_bpm:.1f} -> {next_bpm:.1f} BPM)")
+        elif bpm_diff <= 15:
+            compatibility["score"] += 0.15
+            compatibility["bpm_compatible"] = True
+            compatibility["notes"].append(f"Good BPM compatibility ({current_bpm:.1f} -> {next_bpm:.1f} BPM)")
+        elif bpm_diff <= 30:
+            compatibility["score"] += 0.05
+            compatibility["recommended_effects"].append("filter_sweep")
+            compatibility["notes"].append(f"Large BPM difference, recommend filter effects ({current_bpm:.1f} -> {next_bpm:.1f} BPM)")
+    
+    # Hot cue compatibility analysis
+    if current_hot_cues and next_hot_cues:
+        current_duration = current_track.get('duration', 300)  # Default 5 minutes
+        
+        # Find outro hot cues (last 40% of track)
+        outro_cues = [cue for cue in current_hot_cues if cue['time'] > current_duration * 0.6]
+        
+        # Find intro hot cues (first 2 minutes)
+        intro_cues = [cue for cue in next_hot_cues if cue['time'] < 120]
+        
+        if outro_cues and intro_cues:
+            compatibility["hot_cue_compatible"] = True
+            compatibility["score"] += 0.4
+            
+            # Find best cue pair
+            best_outro = None
+            best_intro = None
+            best_cue_score = 0
+            
+            for outro_cue in outro_cues:
+                for intro_cue in intro_cues:
+                    cue_score = calculate_cue_pair_score(outro_cue, intro_cue)
+                    if cue_score > best_cue_score:
+                        best_cue_score = cue_score
+                        best_outro = outro_cue
+                        best_intro = intro_cue
+            
+            if best_outro and best_intro:
+                compatibility["optimal_outro_cue"] = best_outro
+                compatibility["optimal_intro_cue"] = best_intro
+                compatibility["score"] += best_cue_score * 0.2
+                compatibility["notes"].append(f"Optimal transition: {best_outro['name']} -> {best_intro['name']}")
+                
+                # Recommend scratch effect for phrase transitions
+                if best_outro.get('type') == 'phrase' and best_intro.get('type') == 'phrase':
+                    compatibility["recommended_effects"].append("scratch")
+                    compatibility["notes"].append("Phrase-to-phrase transition - scratch effect recommended")
+    
+    elif current_hot_cues or next_hot_cues:
+        compatibility["score"] += 0.1
+        compatibility["notes"].append("Partial hot cue data available")
+    
+    return compatibility
+
+def calculate_cue_pair_score(outro_cue: Dict, intro_cue: Dict) -> float:
+    """Calculate compatibility score for a specific cue pair."""
+    score = 0.0
+    
+    # Prefer phrase cues
+    if outro_cue.get('type') == 'phrase':
+        score += 0.3
+    if intro_cue.get('type') == 'phrase':
+        score += 0.3
+    
+    # Analyze cue names for semantic matching
+    outro_name = outro_cue.get('name', '').lower()
+    intro_name = intro_cue.get('name', '').lower()
+    
+    # Perfect matches
+    if 'outro' in outro_name and 'intro' in intro_name:
+        score += 0.4
+    elif 'end' in outro_name and 'start' in intro_name:
+        score += 0.3
+    elif 'break' in outro_name and 'drop' in intro_name:
+        score += 0.2
+    
+    return min(1.0, score)
+
 @tool
 def search_tracks_by_vibe(vibe_keywords: str, limit: int = 20) -> List[Dict]:
     """Search for tracks that match the given vibe keywords.
@@ -260,7 +479,7 @@ def finalize_playlist(track_filepaths: List[str], mixing_notes: Optional[List[st
 class DJAgent:
     """LangGraph agent for DJ playlist and vibe management."""
     
-    def __init__(self, llm_model: str = "o4-mini"):
+    def __init__(self, llm_model: str = "gpt-4.1"):
         logger.info(f"🚀 Initializing DJAgent with model: {llm_model}")
         self.db = get_sqlite_db()
         self.llm = ChatOpenAI(model=llm_model, temperature=1)
@@ -322,7 +541,7 @@ class DJAgent:
                     break
         
         # Invoke the model with the current messages
-        logger.info("🧠 Agent thinking...")
+        # logger.info("🧠 Agent thinking...")
         response = self.llm_with_tools.invoke(messages)
         
         # Log if agent is calling tools or providing final answer
@@ -1101,6 +1320,52 @@ What track should I play after {current_track}?"""
             
             if finalized_playlist:
                 logger.info(f"📋 Found finalized playlist with {len(finalized_playlist)} tracks")
+                
+                # Step 2: Hot Cue Transition Planning
+                logger.info("=" * 50)
+                logger.info("🎛️ STEP 2: HOT CUE TRANSITION PLANNING")
+                
+                transition_plan = None
+                hot_cue_analysis = None
+                
+                try:
+                    # Extract track filepaths for hot cue analysis
+                    track_filepaths = [track.get('filepath') for track in finalized_playlist if track.get('filepath')]
+                    
+                    if len(track_filepaths) >= 2:
+                        logger.info(f"Analyzing transitions for {len(track_filepaths)} tracks...")
+                        
+                        # Analyze hot cue transitions
+                        transition_analysis = analyze_hot_cue_transitions(track_filepaths)
+                        
+                        # Create transition planning result
+                        transition_plan = transition_analysis
+                        hot_cue_analysis = {
+                            "tracks_analyzed": len(track_filepaths),
+                            "optimal_transitions": transition_analysis.get("optimal_transitions", 0),
+                            "total_transitions": len(transition_analysis.get("transitions", [])),
+                            "recommendations": transition_analysis.get("recommendations", [])
+                        }
+                        
+                        # Log transition analysis summary
+                        optimal_count = transition_analysis.get("optimal_transitions", 0)
+                        total_count = len(transition_analysis.get("transitions", []))
+                        
+                        logger.info(f"✅ Transition analysis complete:")
+                        logger.info(f"   Optimal transitions: {optimal_count}/{total_count}")
+                        logger.info(f"   Hot cue coverage: {transition_analysis.get('tracks_with_hot_cues', 0)}/{len(track_filepaths)} tracks")
+                        
+                        for recommendation in transition_analysis.get("recommendations", []):
+                            logger.info(f"   💡 {recommendation}")
+                            
+                    else:
+                        logger.warning("Not enough tracks for transition analysis")
+                        transition_plan = {"error": "Insufficient tracks for analysis"}
+                        
+                except Exception as e:
+                    logger.error(f"❌ Error in transition planning: {e}")
+                    transition_plan = {"error": str(e)}
+                    
             else:
                 logger.warning("⚠️ No finalized playlist found in result")
             
@@ -1111,6 +1376,8 @@ What track should I play after {current_track}?"""
                 "response": response_text,
                 "thread_id": thread_id,
                 "finalized_playlist": finalized_playlist,
+                "transition_plan": transition_plan,
+                "hot_cue_analysis": hot_cue_analysis,
                 "state": result  # Include full state for debugging
             }
             

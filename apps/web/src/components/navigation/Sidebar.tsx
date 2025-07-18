@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { HomeIcon, MicrophoneIcon, SparklesIcon, HeartIcon, PlayIcon, PauseIcon } from '@heroicons/react/24/outline';
+import { HomeIcon, MicrophoneIcon, SparklesIcon, HeartIcon, PlayIcon, PauseIcon, ClockIcon, MusicalNoteIcon, Cog6ToothIcon } from '@heroicons/react/24/outline';
 import { useAudioPlayer } from '@/context/AudioPlayerContext';
 import { musicService } from '@/services/musicService';
 import Image from 'next/image';
@@ -15,7 +15,13 @@ const Sidebar = () => {
     nextTrack: upcomingTrack,
     isTransitioning,
     currentTime,
-    duration 
+    duration,
+    autoTransition,
+    setAutoTransition,
+    mixMode,
+    setMixMode,
+    mixInterval,
+    setMixInterval
   } = useAudioPlayer();
 
   const formatDuration = (duration: number): string => {
@@ -138,9 +144,24 @@ const Sidebar = () => {
                 Next Up
               </p>
               <div className="flex gap-2">
-                <div className="w-8 h-8 rounded bg-zinc-700 flex items-center justify-center text-xs text-gray-400 flex-shrink-0">
-                  ♪
-                </div>
+                {upcomingTrack.has_artwork ? (
+                  <div className="w-8 h-8 rounded overflow-hidden bg-zinc-700 relative flex-shrink-0">
+                    <Image
+                      src={musicService.getArtworkUrl(upcomingTrack.filepath)}
+                      alt={upcomingTrack.album || 'Album artwork'}
+                      fill
+                      className="object-cover"
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement;
+                        target.style.display = 'none';
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <div className="w-8 h-8 rounded bg-zinc-700 flex items-center justify-center text-xs text-gray-400 flex-shrink-0">
+                    ♪
+                  </div>
+                )}
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-white truncate" title={upcomingTrack.title || upcomingTrack.filename}>
                     {upcomingTrack.title || upcomingTrack.filename}
@@ -149,6 +170,114 @@ const Sidebar = () => {
                     {upcomingTrack.artist || 'Unknown Artist'}
                   </p>
                 </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Mix Mode Settings */}
+      {djMode && (
+        <div className="bg-zinc-800/50 rounded-xl p-4 border border-zinc-700">
+          <h2 className="text-sm font-semibold text-gray-400 mb-3 uppercase tracking-wide">
+            Mix Settings
+          </h2>
+          
+          {/* Auto Transition Toggle */}
+          <div className="flex items-center justify-between mb-4">
+            <span className="text-sm text-gray-300">Auto-Mix</span>
+            <button
+              onClick={() => setAutoTransition(!autoTransition)}
+              className={`px-3 py-1 rounded-full text-xs font-medium transition ${
+                autoTransition 
+                  ? 'bg-green-600 text-white' 
+                  : 'bg-gray-600 text-gray-300'
+              }`}
+            >
+              {autoTransition ? 'ON' : 'OFF'}
+            </button>
+          </div>
+
+          {/* Mix Mode Selection */}
+          <div className="space-y-2">
+            <label className="text-xs text-gray-400 uppercase tracking-wide">Mix Mode</label>
+            <div className="grid grid-cols-3 gap-1">
+              <button
+                onClick={() => setMixMode('track-end')}
+                className={`px-2 py-2 rounded text-xs font-medium transition flex flex-col items-center gap-1 ${
+                  mixMode === 'track-end'
+                    ? 'bg-purple-600 text-white'
+                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                }`}
+                title="Auto-mix near end of track"
+              >
+                <Cog6ToothIcon className="h-4 w-4" />
+                Track End
+              </button>
+              <button
+                onClick={() => setMixMode('interval')}
+                className={`px-2 py-2 rounded text-xs font-medium transition flex flex-col items-center gap-1 ${
+                  mixMode === 'interval'
+                    ? 'bg-purple-600 text-white'
+                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                }`}
+                title="Auto-mix at fixed intervals"
+              >
+                <ClockIcon className="h-4 w-4" />
+                Interval
+              </button>
+              <button
+                onClick={() => setMixMode('hot-cue')}
+                className={`px-2 py-2 rounded text-xs font-medium transition flex flex-col items-center gap-1 ${
+                  mixMode === 'hot-cue'
+                    ? 'bg-purple-600 text-white'
+                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                }`}
+                title="Auto-mix at hot cue points"
+              >
+                <MusicalNoteIcon className="h-4 w-4" />
+                Hot Cue
+              </button>
+            </div>
+          </div>
+
+          {/* Interval Settings */}
+          {mixMode === 'interval' && (
+            <div className="mt-4 space-y-2">
+              <label className="text-xs text-gray-400 uppercase tracking-wide">
+                Mix Interval
+              </label>
+              <div className="grid grid-cols-3 gap-1">
+                <button
+                  onClick={() => setMixInterval(30)}
+                  className={`px-2 py-2 rounded text-xs font-medium transition ${
+                    mixInterval === 30
+                      ? 'bg-purple-600 text-white'
+                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  }`}
+                >
+                  30s
+                </button>
+                <button
+                  onClick={() => setMixInterval(60)}
+                  className={`px-2 py-2 rounded text-xs font-medium transition ${
+                    mixInterval === 60
+                      ? 'bg-purple-600 text-white'
+                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  }`}
+                >
+                  60s
+                </button>
+                <button
+                  onClick={() => setMixInterval(90)}
+                  className={`px-2 py-2 rounded text-xs font-medium transition ${
+                    mixInterval === 90
+                      ? 'bg-purple-600 text-white'
+                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  }`}
+                >
+                  90s
+                </button>
               </div>
             </div>
           )}

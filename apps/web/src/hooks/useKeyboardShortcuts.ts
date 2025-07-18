@@ -8,9 +8,9 @@ export const useKeyboardShortcuts = () => {
     isPlaying,
     currentTrack,
     pause,
-    resume,
+    play,
     skipToNext,
-    previousTrack,
+    skipToPrevious,
     setVolume,
     volume,
     toggleMute,
@@ -34,7 +34,7 @@ export const useKeyboardShortcuts = () => {
             if (isPlaying) {
               pause();
             } else {
-              resume();
+              play();
             }
           }
           break;
@@ -49,7 +49,7 @@ export const useKeyboardShortcuts = () => {
         case 'ArrowLeft':
           if (e.shiftKey) {
             e.preventDefault();
-            previousTrack();
+            skipToPrevious();
           }
           break;
 
@@ -88,9 +88,9 @@ export const useKeyboardShortcuts = () => {
     isPlaying,
     currentTrack,
     pause,
-    resume,
+    play,
     skipToNext,
-    previousTrack,
+    skipToPrevious,
     setVolume,
     volume,
     toggleMute,

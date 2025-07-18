@@ -30,6 +30,16 @@ interface TransitionEffect {
   duration: number;
 }
 
+interface HotCueTransitionPlan {
+  outroHotCue: HotCue;
+  introHotCue: HotCue;
+  compatibilityScore: number; // 0-1 score indicating how well the cues match
+  bpmCompatible: boolean;
+  phraseAligned: boolean;
+  recommendedCrossfadeDuration: number;
+  recommendedEffects: TransitionEffect[];
+}
+
 interface AudioPlayerState {
   // Current track and queue
   currentTrack: Track | null;
@@ -52,7 +62,7 @@ interface AudioPlayerState {
   djMode: boolean;
   autoTransition: boolean;
   mixInterval: number; // Fixed interval in seconds (30, 45, 60)
-  mixMode: 'interval' | 'track-end'; // New: choose between fixed interval or track-end mixing
+  mixMode: 'interval' | 'track-end' | 'hot-cue'; // Choose between fixed interval, track-end, or hot cue mixing
   transitionTime: number; // seconds before end to start transition (for track-end mode)
   crossfadeDuration: number; // duration of crossfade in seconds
   isTransitioning: boolean;
@@ -76,6 +86,9 @@ interface AudioPlayerState {
   sourceBpm: number | null;
   targetBpm: number | null;
   syncRatio: number;
+  
+  // Hot cue transition planning
+  hotCueTransitionPlan: HotCueTransitionPlan | null;
 }
 
 interface AudioPlayerActions {
@@ -120,6 +133,7 @@ interface AudioPlayerContextType {
   duration: number;
   currentTime: number;
   volume: number;
+  isMuted: boolean;
   queue: Track[];
   currentIndex: number;
   shuffle: boolean;
@@ -152,6 +166,7 @@ interface AudioPlayerContextType {
   skipToPrevious: () => void;
   seek: (time: number) => void;
   setVolume: (volume: number) => void;
+  toggleMute: () => void;
   toggleShuffle: () => void;
   toggleRepeat: () => void;
   addToQueue: (track: Track) => void;
@@ -175,9 +190,9 @@ interface AudioPlayerContextType {
   triggerEcho: (intensity?: number) => void;
   triggerFilter: (intensity?: number) => void;
   setMixInterval: (seconds: number) => void;
-  setMixMode: (mode: 'interval' | 'track-end') => void;
+  setMixMode: (mode: 'interval' | 'track-end' | 'hot-cue') => void;
   mixInterval: number;
-  mixMode: 'interval' | 'track-end';
+  mixMode: 'interval' | 'track-end' | 'hot-cue';
 }
 
 const AudioPlayerContext = createContext<AudioPlayerContextType | null>(null);
@@ -207,6 +222,14 @@ export const AudioPlayerProvider: React.FC<AudioPlayerProviderProps> = ({ childr
   
   // Add state ref to avoid stale closures
   const stateRef = useRef<AudioPlayerState | null>(null);
+  
+  // Track connection state to prevent multiple connections
+  const currentConnectedRef = useRef<boolean>(false);
+  const nextConnectedRef = useRef<boolean>(false);
+  
+  // Compressor nodes for better audio quality
+  const currentCompressorRef = useRef<DynamicsCompressorNode | null>(null);
+  const nextCompressorRef = useRef<DynamicsCompressorNode | null>(null);
   
   // Enhanced audio processing refs
   const filterRef = useRef<BiquadFilterNode | null>(null);
@@ -252,6 +275,7 @@ export const AudioPlayerProvider: React.FC<AudioPlayerProviderProps> = ({ childr
     sourceBpm: null,
     targetBpm: null,
     syncRatio: 1.0,
+    hotCueTransitionPlan: null,
   });
 
   // Keep stateRef in sync
@@ -297,93 +321,98 @@ export const AudioPlayerProvider: React.FC<AudioPlayerProviderProps> = ({ childr
     };
   }, []);
 
-  // Setup Web Audio API connections for an audio element
-  const setupAudioConnection = (audioElement: HTMLAudioElement, isNext: boolean = false) => {
+  // Add scratch buffer creation for real scratch effects
+  const createScratchBuffer = () => {
     if (!audioContextRef.current) return null;
+    
+    const context = audioContextRef.current;
+    const bufferLength = context.sampleRate * 0.1; // 100ms scratch buffer
+    const buffer = context.createBuffer(1, bufferLength, context.sampleRate);
+    const data = buffer.getChannelData(0);
+    
+    // Generate scratch sound (vinyl-like noise)
+    for (let i = 0; i < bufferLength; i++) {
+      const t = i / context.sampleRate;
+      // Vinyl scratch simulation: filtered white noise with frequency sweep
+      const noise = (Math.random() * 2 - 1) * 0.3;
+      const freq = 1000 + Math.sin(t * 50) * 800; // Frequency sweep
+      const tone = Math.sin(2 * Math.PI * freq * t) * 0.1;
+      data[i] = (noise + tone) * Math.exp(-t * 5); // Decay envelope
+    }
+    
+    return buffer;
+  };
 
+  // Initialize Web Audio connections ONCE when audio elements are created
+  const initializeWebAudioConnections = async () => {
+    if (!audioContextRef.current || !audioRef.current || !nextAudioRef.current) return;
+    
+    const context = audioContextRef.current;
+    
+    // Resume context if needed
+    if (context.state === 'suspended') {
+      await context.resume();
+    }
+    
     try {
-      const context = audioContextRef.current;
-      
-      // Create source if it doesn't exist
-      let source: MediaElementAudioSourceNode;
-      let gainNode: GainNode;
-      
-      if (isNext) {
-        if (!nextSourceRef.current) {
-          try {
-            nextSourceRef.current = context.createMediaElementSource(audioElement);
-            console.log('🎧 DJ MIND: Created next track source node');
-          } catch (error: any) {
-            if (error.message && error.message.includes('already connected')) {
-              console.log('🎧 DJ MIND: Next track source already exists, reusing...');
-              // If source already exists, we'll use the existing one
-              return { source: nextSourceRef.current, gainNode: nextGainRef.current };
-            } else {
-              throw error;
-            }
-          }
-        }
-        if (!nextGainRef.current) {
-          nextGainRef.current = context.createGain();
-          console.log('🎧 DJ MIND: Created next track gain node');
-        }
-        source = nextSourceRef.current;
-        gainNode = nextGainRef.current;
-      } else {
-        if (!currentSourceRef.current) {
-          try {
-            currentSourceRef.current = context.createMediaElementSource(audioElement);
-            console.log('🎧 DJ MIND: Created current track source node');
-          } catch (error: any) {
-            if (error.message && error.message.includes('already connected')) {
-              console.log('🎧 DJ MIND: Current track source already exists, reusing...');
-              // If source already exists, we'll use the existing one
-              return { source: currentSourceRef.current, gainNode: currentGainRef.current };
-            } else {
-              throw error;
-            }
-          }
-        }
-        if (!currentGainRef.current) {
-          currentGainRef.current = context.createGain();
-          console.log('🎧 DJ MIND: Created current track gain node');
-        }
-        source = currentSourceRef.current;
-        gainNode = currentGainRef.current;
-      }
-
-      // Connect: source -> gain -> destination (only if not already connected)
-      try {
-        source.connect(gainNode);
-        gainNode.connect(context.destination);
-        console.log(`🎧 DJ MIND: ${isNext ? 'Next' : 'Current'} track audio graph connected`);
-      } catch (error: any) {
-        if (error.message && error.message.includes('already connected')) {
-          console.log(`🎧 DJ MIND: ${isNext ? 'Next' : 'Current'} track audio graph already connected`);
-        } else {
-          throw error;
-        }
+      // Only create connections if they don't exist
+      if (!currentSourceRef.current) {
+        currentSourceRef.current = context.createMediaElementSource(audioRef.current);
+        currentGainRef.current = context.createGain();
+        currentCompressorRef.current = context.createDynamicsCompressor();
+        
+        // Configure compressor
+        currentCompressorRef.current.threshold.setValueAtTime(-24, context.currentTime);
+        currentCompressorRef.current.knee.setValueAtTime(30, context.currentTime);
+        currentCompressorRef.current.ratio.setValueAtTime(12, context.currentTime);
+        currentCompressorRef.current.attack.setValueAtTime(0.003, context.currentTime);
+        currentCompressorRef.current.release.setValueAtTime(0.25, context.currentTime);
+        
+        // Connect current track audio graph
+        currentSourceRef.current.connect(currentGainRef.current);
+        currentGainRef.current.connect(currentCompressorRef.current);
+        currentCompressorRef.current.connect(context.destination);
+        
+        currentConnectedRef.current = true;
+        console.log('🎧 DJ MIND: Current track Web Audio initialized');
       }
       
-      // Set initial gain
-      gainNode.gain.value = isNext ? 0 : 1;
-      
-      return { source, gainNode };
-      
+      if (!nextSourceRef.current) {
+        nextSourceRef.current = context.createMediaElementSource(nextAudioRef.current);
+        nextGainRef.current = context.createGain();
+        nextCompressorRef.current = context.createDynamicsCompressor();
+        
+        // Configure compressor
+        nextCompressorRef.current.threshold.setValueAtTime(-24, context.currentTime);
+        nextCompressorRef.current.knee.setValueAtTime(30, context.currentTime);
+        nextCompressorRef.current.ratio.setValueAtTime(12, context.currentTime);
+        nextCompressorRef.current.attack.setValueAtTime(0.003, context.currentTime);
+        nextCompressorRef.current.release.setValueAtTime(0.25, context.currentTime);
+        
+        // Connect next track audio graph
+        nextSourceRef.current.connect(nextGainRef.current);
+        nextGainRef.current.connect(nextCompressorRef.current);
+        nextCompressorRef.current.connect(context.destination);
+        
+        // Start with gain at tiny value (avoids pops)
+        nextGainRef.current.gain.value = 0.001;
+        
+        nextConnectedRef.current = true;
+        console.log('🎧 DJ MIND: Next track Web Audio initialized');
+      }
     } catch (error) {
-      console.error('🎧 DJ MIND: Error setting up audio connection:', error);
-      return null;
+      console.error('🎧 DJ MIND: Error initializing Web Audio connections:', error);
     }
   };
 
   // Declare event handlers at component level so they can be reused
   const handleLoadStart = () => setState(prev => ({ ...prev, isLoading: true }));
   
-  const handleCanPlay = () => {
+  const handleCanPlay = async () => {
     setState(prev => ({ ...prev, isLoading: false }));
-    // Setup Web Audio connection when audio is ready
-    if (state.djMode && audioContextRef.current && audioRef.current) {
-      setupAudioConnection(audioRef.current, false);
+    // Initialize Web Audio connections when in DJ mode
+    if (state.djMode && audioContextRef.current) {
+      await initializeWebAudioConnections();
     }
   };
   
@@ -556,6 +585,8 @@ export const AudioPlayerProvider: React.FC<AudioPlayerProviderProps> = ({ childr
 
     return () => {
       removeEventListeners(audio);
+      
+      // Stop playback
       audio.pause();
       nextAudio.pause();
       
@@ -566,6 +597,9 @@ export const AudioPlayerProvider: React.FC<AudioPlayerProviderProps> = ({ childr
       if (transitionIntervalRef.current) {
         clearInterval(transitionIntervalRef.current);
       }
+      
+      // Note: We don't close the audio context or disconnect nodes
+      // because that would require recreating everything if the component remounts
     };
   }, []);
 
@@ -601,11 +635,25 @@ export const AudioPlayerProvider: React.FC<AudioPlayerProviderProps> = ({ childr
           repeat: state.repeat
         });
         
+        // No need to clean up connections anymore - they're permanent
+        
         // Preload next track if it exists
         if (nextAudioRef.current && nextTrack) {
           nextAudioRef.current.src = `http://localhost:8000/track/${encodeURIComponent(nextTrack.filepath)}/stream`;
           nextAudioRef.current.load();
           console.log('🎧 DJ MIND: Next track preloaded');
+          
+          // Also ensure the next track has its hot cues loaded
+          if (!state.hotCues[nextTrack.filepath]) {
+            // Try to import hot cues for the next track
+            importSeratoHotCues(nextTrack).then(result => {
+              if (result.imported > 0) {
+                console.log('🎧 DJ MIND: Hot cues imported for next track', result);
+              }
+            }).catch(error => {
+              console.log('🎧 DJ MIND: Could not import hot cues for next track:', error);
+            });
+          }
         }
         
         // Setup effects chain when track changes
@@ -665,7 +713,7 @@ export const AudioPlayerProvider: React.FC<AudioPlayerProviderProps> = ({ childr
           // Call the transition with proper state checks
           triggerAutoTransition(currentState);
         }
-      } else {
+      } else if (currentState.mixMode === 'track-end') {
         // Original track-end mixing
         const optimalTransitionTime = currentState.currentTrack && currentState.nextTrack 
           ? calculateBeatAlignedTransition(currentState.currentTrack, currentState.nextTrack)
@@ -681,36 +729,99 @@ export const AudioPlayerProvider: React.FC<AudioPlayerProviderProps> = ({ childr
           // Call the transition with proper state checks
           triggerAutoTransition(currentState);
         }
+      } else if (currentState.mixMode === 'hot-cue') {
+        // Simple hot cue-based mixing
+        const currentTrackHotCues = currentState.hotCues[currentState.currentTrack?.filepath || ''] || [];
+        
+        if (currentTrackHotCues.length > 0) {
+          // Find a good outro hot cue in the last part of the track
+          const outroHotCues = currentTrackHotCues.filter(cue => 
+            cue.time > duration * 0.7 && cue.time < duration - 8 // Last 30% but not too close to end
+          );
+          
+          if (outroHotCues.length > 0) {
+            // Use the last outro hot cue as transition point
+            const outroHotCue = outroHotCues[outroHotCues.length - 1];
+            const timeUntilHotCue = outroHotCue.time - currentTime;
+            
+            setState(prev => ({ ...prev, timeUntilTransition: timeUntilHotCue }));
+            
+            if (timeUntilHotCue <= 1.0 && currentState.nextTrack && !currentState.isTransitioning) {
+              console.log('🎧 DJ MIND: ⏰ HOT CUE TRANSITION!', {
+                outroName: outroHotCue.name,
+                outroTime: outroHotCue.time.toFixed(1)
+              });
+              triggerAutoTransition(currentState);
+            }
+          } else {
+            // No good outro hot cues, use track-end approach
+            const timeUntilTransition = duration - currentTime - currentState.transitionTime;
+            setState(prev => ({ ...prev, timeUntilTransition }));
+            
+            if (timeUntilTransition <= 0 && currentState.nextTrack && !currentState.isTransitioning) {
+              console.log('🎧 DJ MIND: ⏰ HOT CUE MODE - using track-end fallback');
+              triggerAutoTransition(currentState);
+            }
+          }
+        } else {
+          // No hot cues available, use track-end approach
+          const timeUntilTransition = duration - currentTime - currentState.transitionTime;
+          setState(prev => ({ ...prev, timeUntilTransition }));
+          
+          if (timeUntilTransition <= 0 && currentState.nextTrack && !currentState.isTransitioning) {
+            console.log('🎧 DJ MIND: ⏰ HOT CUE MODE - no hot cues, using track-end fallback');
+            triggerAutoTransition(currentState);
+          }
+        }
       }
     }
   }, []);
 
-  // New function to handle auto transitions with proper state
+  // Fixed transition trigger with proper race condition prevention
   const triggerAutoTransition = (currentState: AudioPlayerState) => {
-    if (currentState.djMode && currentState.nextTrack && !currentState.isTransitioning) {
-      console.log('🎧 DJ MIND: 🚀 AUTO TRANSITION TRIGGERED!', {
-        currentTrack: currentState.currentTrack?.title || currentState.currentTrack?.filename,
-        nextTrack: currentState.nextTrack.title || currentState.nextTrack.filename,
-        reason: 'Auto interval/track-end transition'
-      });
-      
-      // Set transitioning state immediately
-      setState(prev => ({ ...prev, isTransitioning: true }));
-      
-      // Start the transition
-      startTransition();
-    } else {
-      console.log('🎧 DJ MIND: Cannot start auto transition', {
-        djMode: currentState.djMode,
-        hasNextTrack: !!currentState.nextTrack,
-        isTransitioning: currentState.isTransitioning
-      });
+    // Double-check state to prevent race conditions
+    if (!currentState.djMode) {
+      console.log('🎧 DJ MIND: Cannot trigger transition - DJ mode disabled');
+      return;
     }
+    
+    if (!currentState.nextTrack) {
+      console.log('🎧 DJ MIND: Cannot trigger transition - no next track');
+      return;
+    }
+    
+    if (currentState.isTransitioning) {
+      console.log('🎧 DJ MIND: Cannot trigger transition - already transitioning');
+      return;
+    }
+    
+    console.log('🎧 DJ MIND: 🚀 AUTO TRANSITION TRIGGERED!', {
+      currentTrack: currentState.currentTrack?.title || currentState.currentTrack?.filename,
+      nextTrack: currentState.nextTrack?.title || currentState.nextTrack?.filename,
+      mode: currentState.mixMode
+    });
+    
+    // Set transitioning state and immediately start transition
+    setState(prev => {
+      // Double-check again during state update
+      if (prev.isTransitioning) {
+        console.log('🎧 DJ MIND: Transition blocked - already in progress');
+        return prev; // No change
+      }
+      
+      return { ...prev, isTransitioning: true };
+    });
+    
+    // Start transition immediately - no delay needed
+    startTransition();
   };
 
   // New function to set mix interval
   const setMixInterval = (seconds: number) => {
-    const newInterval = Math.max(15, Math.min(120, seconds)); // 15s to 2min range
+    // Only allow 30, 60, or 90 second intervals
+    const validIntervals = [30, 60, 90];
+    const newInterval = validIntervals.includes(seconds) ? seconds : 60;
+    
     console.log('🎧 DJ MIND: Mix interval changed', {
       from: state.mixInterval,
       to: newInterval,
@@ -719,11 +830,17 @@ export const AudioPlayerProvider: React.FC<AudioPlayerProviderProps> = ({ childr
         ? `Will auto-mix every ${newInterval} seconds`
         : `Will start crossfade ${newInterval} seconds before track ends`
     });
-    setState(prev => ({ ...prev, mixInterval: newInterval }));
+    
+    setState(prev => ({ 
+      ...prev, 
+      mixInterval: newInterval,
+      // Reset time calculation when interval changes
+      timeUntilTransition: newInterval
+    }));
   };
 
   // New function to toggle mix mode
-  const setMixMode = (mode: 'interval' | 'track-end') => {
+  const setMixMode = (mode: 'interval' | 'track-end' | 'hot-cue') => {
     console.log('🎧 DJ MIND: Mix mode changed', {
       from: state.mixMode,
       to: mode,
@@ -734,13 +851,17 @@ export const AudioPlayerProvider: React.FC<AudioPlayerProviderProps> = ({ childr
   };
 
   const startTransition = async () => {
-    if (!audioRef.current || !nextAudioRef.current || !stateRef.current?.nextTrack || !audioContextRef.current) return;
+    if (!audioRef.current || !nextAudioRef.current || !stateRef.current?.nextTrack || !audioContextRef.current) {
+      console.error('🎧 DJ MIND: Cannot start transition - missing required elements');
+      setState(prev => ({ ...prev, isTransitioning: false }));
+      return;
+    }
 
     const currentState = stateRef.current;
     
     console.log('🎧 DJ MIND: 🔥 STARTING TRANSITION SEQUENCE 🔥', {
       currentTrack: currentState.currentTrack?.title || currentState.currentTrack?.filename,
-      nextTrack: currentState.nextTrack.title || currentState.nextTrack.filename,
+      nextTrack: currentState.nextTrack?.title || currentState.nextTrack?.filename,
       currentTime: Math.floor(audioRef.current.currentTime),
       duration: Math.floor(currentState.duration),
       crossfadeDuration: currentState.crossfadeDuration,
@@ -761,77 +882,199 @@ export const AudioPlayerProvider: React.FC<AudioPlayerProviderProps> = ({ childr
         console.log('🎧 DJ MIND: Audio context resumed for transition');
       }
 
-      // Setup audio connections for both tracks
-      console.log('🎧 DJ MIND: Setting up audio connections...');
-      
-      // Setup current track connection if not already done
-      if (!currentSourceRef.current) {
-        setupAudioConnection(audioRef.current, false);
-      }
-      
-      // Setup next track connection if not already done
-      if (!nextSourceRef.current) {
-        setupAudioConnection(nextAudioRef.current, true);
+      // Pre-buffer next track to avoid stuttering
+      if (nextAudioRef.current.readyState < 3) { // HAVE_FUTURE_DATA
+        console.log('🎧 DJ MIND: Pre-buffering next track...');
+        await new Promise((resolve, reject) => {
+          const handleCanPlay = () => {
+            nextAudioRef.current?.removeEventListener('canplay', handleCanPlay);
+            nextAudioRef.current?.removeEventListener('error', handleError);
+            resolve(true);
+          };
+          const handleError = () => {
+            nextAudioRef.current?.removeEventListener('canplay', handleCanPlay);
+            nextAudioRef.current?.removeEventListener('error', handleError);
+            reject(new Error('Failed to buffer next track'));
+          };
+          nextAudioRef.current?.addEventListener('canplay', handleCanPlay);
+          nextAudioRef.current?.addEventListener('error', handleError);
+          
+          // Timeout after 5 seconds
+          setTimeout(() => {
+            nextAudioRef.current?.removeEventListener('canplay', handleCanPlay);
+            nextAudioRef.current?.removeEventListener('error', handleError);
+            resolve(true); // Continue anyway
+          }, 5000);
+        });
       }
 
-      // Double-check both gain nodes exist after setup
+      // Ensure Web Audio is initialized
+      if (!currentConnectedRef.current || !nextConnectedRef.current) {
+        console.log('🎧 DJ MIND: Initializing Web Audio connections...');
+        await initializeWebAudioConnections();
+      }
+
+      // Verify gain nodes exist
       if (!currentGainRef.current || !nextGainRef.current) {
-        console.error('🎧 DJ MIND: Missing gain nodes after setup, falling back to simple crossfade');
+        console.error('🎧 DJ MIND: Missing gain nodes, falling back to simple crossfade');
         await startSimpleCrossfade();
         return;
       }
 
       console.log('🎧 DJ MIND: Starting next track...');
       
-      // Reset next track gain to 0 before starting
-      nextGainRef.current.gain.value = 0;
+      // Reset next track gain to tiny value before starting (avoids pops)
+      nextGainRef.current.gain.value = 0.001;
+      
+      // Find the best musical entry point for ALL transitions
+      if (currentState.nextTrack) {
+        const nextTrackHotCues = currentState.hotCues[currentState.nextTrack.filepath] || [];
+        
+        console.log('🎧 DJ MIND: Checking hot cues for transition', {
+          track: currentState.nextTrack.title || currentState.nextTrack.filename,
+          hotCueCount: nextTrackHotCues.length,
+          hotCues: nextTrackHotCues.map(c => ({ name: c.name, time: c.time, type: c.type }))
+        });
+        
+        if (nextTrackHotCues.length > 0) {
+          // Simple, reliable hot cue selection: prefer musical entry points
+          let bestIntroHotCue = null;
+          
+          // Priority 1: Look for intro/verse markers in first 45 seconds
+          for (const cue of nextTrackHotCues) {
+            const cueName = cue.name.toLowerCase();
+            if (cue.time >= 8 && cue.time <= 45) {
+              if (cueName.includes('intro') || cueName.includes('verse') || cueName.includes('start')) {
+                bestIntroHotCue = cue;
+                break; // Take the first good match
+              }
+            }
+          }
+          
+          // Priority 2: Any phrase-type cue in reasonable range
+          if (!bestIntroHotCue) {
+            for (const cue of nextTrackHotCues) {
+              if (cue.time >= 8 && cue.time <= 30 && cue.type === 'phrase') {
+                bestIntroHotCue = cue;
+                break;
+              }
+            }
+          }
+          
+          // Priority 3: Earliest cue that's not too early
+          if (!bestIntroHotCue) {
+            const goodCues = nextTrackHotCues.filter(cue => cue.time >= 8 && cue.time <= 20);
+            if (goodCues.length > 0) {
+              bestIntroHotCue = goodCues[0]; // Take earliest
+            }
+          }
+          
+          if (bestIntroHotCue) {
+            nextAudioRef.current.currentTime = bestIntroHotCue.time;
+            console.log('🎧 DJ MIND: 🎯 Starting next track at hot cue', {
+              cueName: bestIntroHotCue.name,
+              cueTime: bestIntroHotCue.time.toFixed(1),
+              cueType: bestIntroHotCue.type,
+              mixMode: currentState.mixMode
+            });
+          } else {
+            // No good hot cue found, start at a sensible default
+            nextAudioRef.current.currentTime = 8; // 8 seconds in
+            console.log('🎧 DJ MIND: No suitable hot cue, starting at 8 seconds');
+          }
+        } else {
+          // No hot cues available, start at beginning (skip silence)
+          nextAudioRef.current.currentTime = 4;
+          console.log('🎧 DJ MIND: No hot cues available, starting at 4 seconds');
+        }
+      }
+      
+      // Set up Web Audio gain BEFORE starting playback to prevent stutter
+      const audioContext = audioContextRef.current!;
+      const now = audioContext.currentTime;
+      
+      // Verify gain nodes exist and pre-configure next track gain
+      if (!currentGainRef.current || !nextGainRef.current) {
+        console.error('🎧 DJ MIND: ❌ Missing gain nodes for crossfade');
+        await startSimpleCrossfade();
+        return;
+      }
+
+      // Clear any existing automation and set initial values BEFORE playback
+      // Use 0 for cancelScheduledValues to ensure all automation is cleared
+      currentGainRef.current.gain.cancelScheduledValues(0);
+      nextGainRef.current.gain.cancelScheduledValues(0);
+      
+      const currentVolume = currentState.volume;
+      // Get the actual current gain value (in case user seeked)
+      const actualCurrentGain = currentGainRef.current.gain.value;
+      currentGainRef.current.gain.setValueAtTime(actualCurrentGain, now);
+      nextGainRef.current.gain.setValueAtTime(0.001, now); // Start at very low value, not 0
+      
+      // IMPORTANT: Set element volume to 0 as a safety measure
+      nextAudioRef.current.volume = 0;
       
       // Start playing next track
-      nextAudioRef.current.volume = 1; // Set volume to 1 since Web Audio will control gain
       await nextAudioRef.current.play();
       
-      console.log('🎧 DJ MIND: Next track playing, beginning crossfade...');
+      // Now set the element volume to 1 and let Web Audio control gain
+      nextAudioRef.current.volume = 1;
+      
+      // Give a tiny moment for audio to stabilize
+      await new Promise(resolve => setTimeout(resolve, 50));
+      
+      console.log('🎧 DJ MIND: Next track playing silently, beginning smooth crossfade...');
 
-      // Crossfade animation
-      const crossfadeSteps = 50;
-      const stepDuration = (currentState.crossfadeDuration * 1000) / crossfadeSteps;
-      let step = 0;
+      // Smooth crossfade using reliable linear automation
+      const fadeTime = currentState.crossfadeDuration;
+      
+      console.log('🎧 DJ MIND: Starting smooth crossfade', {
+        fadeTime,
+        startTime: now.toFixed(3),
+        endTime: (now + fadeTime).toFixed(3)
+      });
 
-      const crossfadeInterval = setInterval(() => {
-        step++;
-        const progress = step / crossfadeSteps;
-        
-        // Calculate gains using cosine/sine for smooth crossfade
-        const currentGain = Math.cos(progress * Math.PI / 2);
-        const nextGain = Math.sin(progress * Math.PI / 2);
-        
-        // Apply gains
-        if (currentGainRef.current) {
-          currentGainRef.current.gain.value = currentGain * currentState.volume;
-        }
-        if (nextGainRef.current) {
-          nextGainRef.current.gain.value = nextGain * currentState.volume;
-        }
-        
-        // Log progress at key points
-        if (step % 10 === 0 || step === crossfadeSteps) {
-          console.log(`🎧 DJ MIND: Crossfade ${Math.round(progress * 100)}%`, {
-            currentGain: currentGain.toFixed(2),
-            nextGain: nextGain.toFixed(2),
-            step: `${step}/${crossfadeSteps}`,
-            currentActualGain: (currentGain * currentState.volume).toFixed(2),
-            nextActualGain: (nextGain * currentState.volume).toFixed(2)
-          });
-        }
-        
+      // Schedule smooth crossfade
+      const fadeEndTime = now + fadeTime;
+      
+      // Set current value explicitly before scheduling
+      currentGainRef.current.gain.setValueAtTime(currentVolume, now);
+      nextGainRef.current.gain.setValueAtTime(0.001, now); // Start from tiny value for exponential
+      
+      // Use linear fade out for current track (smoother)
+      currentGainRef.current.gain.linearRampToValueAtTime(0.001, fadeEndTime);
+      
+      // Use linear fade in for next track (avoids exponential issues)
+      nextGainRef.current.gain.linearRampToValueAtTime(currentVolume, fadeEndTime);
+
+      console.log('🎧 DJ MIND: ✅ Linear crossfade automation scheduled', {
+        currentStart: currentVolume,
+        currentEnd: 0.001,
+        nextStart: 0.001,
+        nextEnd: currentVolume,
+        duration: fadeTime
+      });
+
+      // Simple completion timer based on crossfade duration
+      setTimeout(() => {
+        console.log('🎧 DJ MIND: ✅ Crossfade complete, finalizing transition...');
+        completeTransition();
+      }, fadeTime * 1000 + 100); // Add small buffer
+
+      // Update UI progress during crossfade
+      const progressSteps = 20;
+      const progressInterval = (fadeTime * 1000) / progressSteps;
+      let progressStep = 0;
+
+      const progressTimer = setInterval(() => {
+        progressStep++;
+        const progress = Math.min(progressStep / progressSteps, 1);
         setState(prev => ({ ...prev, transitionProgress: progress }));
 
-        if (step >= crossfadeSteps) {
-          clearInterval(crossfadeInterval);
-          console.log('🎧 DJ MIND: Crossfade complete, finalizing transition...');
-          completeTransition();
+        if (progress >= 1) {
+          clearInterval(progressTimer);
         }
-      }, stepDuration);
+      }, progressInterval);
 
     } catch (error) {
       console.error('🎧 DJ MIND: ❌ ERROR during Web Audio transition:', error);
@@ -842,52 +1085,65 @@ export const AudioPlayerProvider: React.FC<AudioPlayerProviderProps> = ({ childr
 
   // Fallback crossfade without Web Audio API
   const startSimpleCrossfade = async () => {
-    if (!audioRef.current || !nextAudioRef.current || !state.nextTrack) return;
+    const currentState = stateRef.current;
+    if (!audioRef.current || !nextAudioRef.current || !currentState?.nextTrack) return;
 
-    console.log('🎧 DJ MIND: Using fallback volume crossfade (no Web Audio API)');
+    console.log('🎧 DJ MIND: Using fallback volume crossfade');
     
     try {
-      // Start playing next track
+      // Ensure next track is loaded
+      if (nextAudioRef.current.readyState < 3) {
+        console.log('🎧 DJ MIND: Waiting for next track to load...');
+        await new Promise((resolve) => {
+          const handleCanPlay = () => {
+            nextAudioRef.current?.removeEventListener('canplaythrough', handleCanPlay);
+            resolve(true);
+          };
+          nextAudioRef.current?.addEventListener('canplaythrough', handleCanPlay);
+          setTimeout(() => resolve(true), 3000); // Timeout after 3 seconds
+        });
+      }
+      
+      // Start playing next track at 0 volume
       nextAudioRef.current.volume = 0;
       await nextAudioRef.current.play();
       
       console.log('🎧 DJ MIND: Next track playing, beginning volume crossfade...');
 
-      const crossfadeSteps = 50;
-      const stepDuration = (state.crossfadeDuration * 1000) / crossfadeSteps;
-      let step = 0;
+      const duration = currentState.crossfadeDuration * 1000; // Convert to ms
+      const steps = 30; // 30 steps for smooth fade
+      const stepDuration = duration / steps;
+      let currentStep = 0;
 
-      const crossfadeInterval = setInterval(() => {
-        step++;
-        const progress = step / crossfadeSteps;
+      const fadeInterval = setInterval(() => {
+        currentStep++;
+        const progress = currentStep / steps;
         
-        // Simple volume crossfade
+        // Calculate volumes
+        const currentVolume = (1 - progress) * currentState.volume;
+        const nextVolume = progress * currentState.volume;
+        
+        // Apply volumes
         if (audioRef.current) {
-          audioRef.current.volume = (1 - progress) * state.volume;
+          audioRef.current.volume = Math.max(0, currentVolume);
         }
         if (nextAudioRef.current) {
-          nextAudioRef.current.volume = progress * state.volume;
+          nextAudioRef.current.volume = Math.min(1, nextVolume);
         }
         
-        // Log progress at key points
-        if (step % 10 === 0 || step === crossfadeSteps) {
-          console.log(`🎧 DJ MIND: Volume crossfade ${Math.round(progress * 100)}%`, {
-            currentVolume: ((1 - progress) * state.volume).toFixed(2),
-            nextVolume: (progress * state.volume).toFixed(2),
-            step: `${step}/${crossfadeSteps}`
-          });
-        }
-        
+        // Update progress
         setState(prev => ({ ...prev, transitionProgress: progress }));
 
-        if (step >= crossfadeSteps) {
-          clearInterval(crossfadeInterval);
-          console.log('🎧 DJ MIND: Volume crossfade complete, finalizing transition...');
+        if (currentStep >= steps) {
+          clearInterval(fadeInterval);
+          console.log('🎧 DJ MIND: Simple crossfade complete');
           completeTransition();
         }
       }, stepDuration);
+      
     } catch (error) {
-      console.error('🎧 DJ MIND: ❌ ERROR during simple crossfade:', error);
+      console.error('🎧 DJ MIND: Error in simple crossfade:', error);
+      // Try to complete transition anyway
       completeTransition();
     }
   };
@@ -907,14 +1163,13 @@ export const AudioPlayerProvider: React.FC<AudioPlayerProviderProps> = ({ childr
     audioRef.current.pause();
     console.log('🎧 DJ MIND: Previous track stopped');
 
-    // Store references to current event handlers
+    // Store references for swapping
     const currentAudio = audioRef.current;
-    const nextAudio = nextAudioRef.current;
 
     // Remove event listeners from current audio element
     removeEventListeners(currentAudio);
-
-    // Swap audio elements and their Web Audio connections
+    
+    // Swap audio elements
     const tempAudio = audioRef.current;
     audioRef.current = nextAudioRef.current;
     nextAudioRef.current = tempAudio;
@@ -922,13 +1177,23 @@ export const AudioPlayerProvider: React.FC<AudioPlayerProviderProps> = ({ childr
     // Add event listeners to the new current audio element
     attachEventListeners(audioRef.current);
     
+    // Swap Web Audio connection states
+    const tempConnected = currentConnectedRef.current;
+    currentConnectedRef.current = nextConnectedRef.current;
+    nextConnectedRef.current = tempConnected;
+    
     // Swap Web Audio API references
     const tempSource = currentSourceRef.current;
     const tempGain = currentGainRef.current;
+    const tempCompressor = currentCompressorRef.current;
+    
     currentSourceRef.current = nextSourceRef.current;
     currentGainRef.current = nextGainRef.current;
+    currentCompressorRef.current = nextCompressorRef.current;
+    
     nextSourceRef.current = tempSource;
     nextGainRef.current = tempGain;
+    nextCompressorRef.current = tempCompressor;
     
     console.log('🎧 DJ MIND: Audio elements and Web Audio connections swapped');
 
@@ -947,50 +1212,60 @@ export const AudioPlayerProvider: React.FC<AudioPlayerProviderProps> = ({ childr
       nextTrack: null, // Clear nextTrack so it gets recalculated
     }));
 
-    // Reset volumes and gains
-    if (currentState.djMode && currentGainRef.current) {
-      // In DJ mode, use Web Audio gain
-      currentGainRef.current.gain.value = currentState.volume;
-      audioRef.current.volume = 1; // Keep element volume at 1, control through gain
-      console.log('🎧 DJ MIND: Reset Web Audio gain to', currentState.volume);
-    } else {
-      // Normal mode, use element volume
-      audioRef.current.volume = currentState.volume;
-      console.log('🎧 DJ MIND: Reset element volume to', currentState.volume);
-    }
-    
-    if (nextAudioRef.current) {
-      nextAudioRef.current.volume = currentState.volume;
-    }
-    
-    // Reset next track gain if it exists
-    if (nextGainRef.current) {
-      nextGainRef.current.gain.value = 0;
+    // Reset volumes and gains with proper error handling
+    try {
+      if (currentState.djMode && currentGainRef.current && audioContextRef.current) {
+        // In DJ mode, ensure gain is set correctly
+        const now = audioContextRef.current.currentTime;
+        currentGainRef.current.gain.cancelScheduledValues(now);
+        currentGainRef.current.gain.setValueAtTime(currentState.volume, now);
+        audioRef.current.volume = 1; // Keep element volume at 1, control through gain
+        console.log('🎧 DJ MIND: Reset Web Audio gain to', currentState.volume);
+      } else {
+        // Normal mode, use element volume
+        audioRef.current.volume = currentState.volume;
+        console.log('🎧 DJ MIND: Reset element volume to', currentState.volume);
+      }
+      
+      // Prepare next audio element for reuse
+      if (nextAudioRef.current) {
+        nextAudioRef.current.pause();
+        nextAudioRef.current.currentTime = 0;
+        nextAudioRef.current.volume = 1; // Reset to default
+      }
+      
+      // Reset next track gain if it exists
+      if (nextGainRef.current && audioContextRef.current) {
+        const now = audioContextRef.current.currentTime;
+        nextGainRef.current.gain.cancelScheduledValues(now);
+        nextGainRef.current.gain.setValueAtTime(0, now);
+      }
+    } catch (error) {
+      console.error('🎧 DJ MIND: Error resetting audio levels:', error);
     }
     
     console.log('🎧 DJ MIND: Volumes and gains reset, ready for next transition');
     
-    // Force an immediate update to ensure UI reflects the new track
-    // This will trigger the useEffect that sets up the next track
+    // Set up the next track for future transition
     setTimeout(() => {
       const newState = stateRef.current;
       if (newState?.djMode && newState.queue.length > 0) {
         const upcomingNextIndex = getNextTrackIndex();
         const upcomingNextTrack = upcomingNextIndex >= 0 ? newState.queue[upcomingNextIndex] : null;
         
-        if (upcomingNextTrack) {
+        if (upcomingNextTrack && nextAudioRef.current) {
           console.log('🎧 DJ MIND: Setting up next track after transition:', {
             track: upcomingNextTrack.title || upcomingNextTrack.filename,
             artist: upcomingNextTrack.artist || 'Unknown Artist',
             willTransitionIn: `${newState.mixInterval || newState.transitionTime} seconds`
           });
           
+          // No need to clean up - connections are permanent
+          
           // Preload the new next track
-          if (nextAudioRef.current) {
-            nextAudioRef.current.src = `http://localhost:8000/track/${encodeURIComponent(upcomingNextTrack.filepath)}/stream`;
-            nextAudioRef.current.load();
-            console.log('🎧 DJ MIND: New next track preloaded');
-          }
+          nextAudioRef.current.src = `http://localhost:8000/track/${encodeURIComponent(upcomingNextTrack.filepath)}/stream`;
+          nextAudioRef.current.load();
+          console.log('🎧 DJ MIND: New next track preloaded');
           
           // Update state with the new next track
           setState(prev => ({ ...prev, nextTrack: upcomingNextTrack }));
@@ -1039,18 +1314,10 @@ export const AudioPlayerProvider: React.FC<AudioPlayerProviderProps> = ({ childr
         djMode: state.djMode
       });
       
-      // Setup Web Audio connection for DJ mode
-      if (state.djMode && audioContextRef.current && audioRef.current) {
-        console.log('🎧 DJ MIND: Setting up Web Audio for current track...');
-        
-        // Ensure audio context is resumed
-        if (audioContextRef.current.state === 'suspended') {
-          await audioContextRef.current.resume();
-          console.log('🎧 DJ MIND: Audio context resumed');
-        }
-        
-        // Setup connection for current track
-        setupAudioConnection(audioRef.current, false);
+      // Initialize Web Audio for DJ mode
+      if (state.djMode && audioContextRef.current) {
+        console.log('🎧 DJ MIND: Initializing Web Audio for playback...');
+        await initializeWebAudioConnections();
       }
 
       // Automatically import Serato hot cues for DJ mode
@@ -1223,7 +1490,7 @@ export const AudioPlayerProvider: React.FC<AudioPlayerProviderProps> = ({ childr
   };
 
   // Fix 5: Ensure nextTrack is set immediately when DJ mode is enabled
-  const toggleDjMode = () => {
+  const toggleDjMode = async () => {
     const newDjMode = !state.djMode;
     console.log(`🎧 DJ MIND: DJ Mode ${newDjMode ? 'ACTIVATED' : 'DEACTIVATED'}`, {
       currentTrack: state.currentTrack?.title || state.currentTrack?.filename || 'None',
@@ -1235,18 +1502,26 @@ export const AudioPlayerProvider: React.FC<AudioPlayerProviderProps> = ({ childr
     
     setState(prev => ({ ...prev, djMode: newDjMode }));
     
-    // Immediately set nextTrack when enabling DJ mode
-    if (newDjMode && state.queue.length > 0 && state.currentIndex >= 0) {
-      const nextIndex = getNextTrackIndex();
-      const nextTrack = nextIndex >= 0 ? state.queue[nextIndex] : null;
-      
-      if (nextTrack && nextAudioRef.current) {
-        nextAudioRef.current.src = `http://localhost:8000/track/${encodeURIComponent(nextTrack.filepath)}/stream`;
-        nextAudioRef.current.load();
-        console.log('🎧 DJ MIND: Next track preloaded on DJ mode activation');
+    // Initialize Web Audio when enabling DJ mode
+    if (newDjMode) {
+      if (audioContextRef.current) {
+        console.log('🎧 DJ MIND: Initializing Web Audio for DJ mode...');
+        await initializeWebAudioConnections();
       }
       
-      setState(prev => ({ ...prev, nextTrack }));
+      // Set nextTrack when enabling DJ mode
+      if (state.queue.length > 0 && state.currentIndex >= 0) {
+        const nextIndex = getNextTrackIndex();
+        const nextTrack = nextIndex >= 0 ? state.queue[nextIndex] : null;
+        
+        if (nextTrack && nextAudioRef.current) {
+          nextAudioRef.current.src = `http://localhost:8000/track/${encodeURIComponent(nextTrack.filepath)}/stream`;
+          nextAudioRef.current.load();
+          console.log('🎧 DJ MIND: Next track preloaded on DJ mode activation');
+        }
+        
+        setState(prev => ({ ...prev, nextTrack }));
+      }
     }
   };
 
@@ -1287,7 +1562,7 @@ export const AudioPlayerProvider: React.FC<AudioPlayerProviderProps> = ({ childr
     if (currentState.djMode && currentState.nextTrack && !currentState.isTransitioning) {
       console.log('🎧 DJ MIND: 🚀 MANUAL TRANSITION TRIGGERED!', {
         currentTrack: currentState.currentTrack?.title || currentState.currentTrack?.filename,
-        nextTrack: currentState.nextTrack.title || currentState.nextTrack.filename,
+        nextTrack: currentState.nextTrack?.title || currentState.nextTrack?.filename,
         reason: 'User forced transition'
       });
       
@@ -1311,33 +1586,55 @@ export const AudioPlayerProvider: React.FC<AudioPlayerProviderProps> = ({ childr
     
     const context = audioContextRef.current;
     
-    // Create effects nodes
-    filterRef.current = context.createBiquadFilter();
-    delayRef.current = context.createDelay(2.0); // 2 second max delay
-    analyserRef.current = context.createAnalyser();
-    
-    // Setup analyser for beat detection
-    analyserRef.current.fftSize = 1024;
-    analyserRef.current.smoothingTimeConstant = 0.3;
-    
-    // Create reverb using convolution
-    reverbRef.current = context.createConvolver();
-    
-    // Create distortion using WaveShaper
-    distortionRef.current = context.createWaveShaper();
-    const makeDistortionCurve = (amount: number) => {
-      const samples = 44100;
-      const curve = new Float32Array(samples);
-      const deg = Math.PI / 180;
-      for (let i = 0; i < samples; i++) {
-        const x = (i * 2) / samples - 1;
-        curve[i] = ((3 + amount) * x * 20 * deg) / (Math.PI + amount * Math.abs(x));
+    try {
+      // Create effects nodes
+      filterRef.current = context.createBiquadFilter();
+      delayRef.current = context.createDelay(2.0); // 2 second max delay
+      analyserRef.current = context.createAnalyser();
+      
+      // Setup filter for scratch/sweep effects
+      filterRef.current.type = 'lowpass';
+      filterRef.current.frequency.setValueAtTime(20000, context.currentTime); // Start fully open
+      filterRef.current.Q.setValueAtTime(1, context.currentTime);
+      
+      // Setup delay for echo effects
+      delayRef.current.delayTime.setValueAtTime(0.125, context.currentTime); // 1/8 note delay
+      
+      // Setup analyser for beat detection
+      analyserRef.current.fftSize = 1024;
+      analyserRef.current.smoothingTimeConstant = 0.3;
+      
+      // Create reverb using convolution (simple impulse response)
+      reverbRef.current = context.createConvolver();
+      const impulseLength = context.sampleRate * 2; // 2 second reverb
+      const impulse = context.createBuffer(2, impulseLength, context.sampleRate);
+      for (let channel = 0; channel < 2; channel++) {
+        const channelData = impulse.getChannelData(channel);
+        for (let i = 0; i < impulseLength; i++) {
+          channelData[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / impulseLength, 2);
+        }
       }
-      return curve;
-    };
-    distortionRef.current.curve = makeDistortionCurve(30);
-    
-    console.log('🎧 DJ MIND: Effects chain created');
+      reverbRef.current.buffer = impulse;
+      
+      // Create distortion using WaveShaper
+      distortionRef.current = context.createWaveShaper();
+      const makeDistortionCurve = (amount: number) => {
+        const samples = 44100;
+        const curve = new Float32Array(samples);
+        const deg = Math.PI / 180;
+        for (let i = 0; i < samples; i++) {
+          const x = (i * 2) / samples - 1;
+          curve[i] = ((3 + amount) * x * 20 * deg) / (Math.PI + amount * Math.abs(x));
+        }
+        return curve;
+      };
+      distortionRef.current.curve = makeDistortionCurve(30);
+      distortionRef.current.oversample = '4x';
+      
+      console.log('🎧 DJ MIND: ✅ Effects chain created and configured');
+    } catch (error) {
+      console.error('🎧 DJ MIND: ❌ Error creating effects chain:', error);
+    }
   };
 
   const importSeratoHotCues = async (track: Track) => {
@@ -1588,17 +1885,20 @@ export const AudioPlayerProvider: React.FC<AudioPlayerProviderProps> = ({ childr
     }, effect.duration * 1000);
   };
 
+  // Simple, reliable scratch effect using playback rate modulation
   const scratchEffect = (intensity: number, duration: number) => {
     if (!audioRef.current) return;
     
+    console.log('🎧 DJ MIND: 🎚️ Applying simple scratch effect');
+    
     const originalRate = audioRef.current.playbackRate;
-    const scratchPattern = [1.5, 0.5, 2.0, 0.3, 1.8, 0.7, 1.0]; // Scratch pattern
+    const scratchPattern = [1.2, 0.8, 1.5, 0.7, 1.0];
     let step = 0;
     
     const scratchInterval = setInterval(() => {
       if (audioRef.current && step < scratchPattern.length) {
-        const rate = originalRate * (scratchPattern[step] * intensity);
-        audioRef.current.playbackRate = rate;
+        const rate = scratchPattern[step] * intensity;
+        audioRef.current.playbackRate = originalRate * rate;
         step++;
       } else {
         if (audioRef.current) {
@@ -1608,6 +1908,156 @@ export const AudioPlayerProvider: React.FC<AudioPlayerProviderProps> = ({ childr
         console.log('🎧 DJ MIND: Scratch effect complete');
       }
     }, (duration * 1000) / scratchPattern.length);
+  };
+
+  // Calculate optimal hot cue transition between two tracks
+  const calculateOptimalHotCueTransition = (
+    currentTrackHotCues: HotCue[],
+    nextTrackHotCues: HotCue[],
+    currentTrackDuration: number,
+    currentTime: number,
+    currentBpm?: number,
+    nextBpm?: number
+  ): HotCueTransitionPlan | null => {
+    try {
+      // Filter suitable outro hot cues (in last 40% of track, but not too close to end)
+      const outroHotCues = currentTrackHotCues.filter(cue => {
+        const minTime = currentTrackDuration * 0.6; // Last 40%
+        const maxTime = currentTrackDuration - 15; // Not in last 15 seconds
+        return cue.time >= minTime && cue.time <= maxTime && cue.time > currentTime + 5;
+      });
+
+      // Filter suitable intro hot cues (in first 2 minutes, prefer phrase types)
+      const introHotCues = nextTrackHotCues.filter(cue => {
+        return cue.time >= 8 && cue.time <= 120; // Between 8 seconds and 2 minutes
+      });
+
+      if (outroHotCues.length === 0 || introHotCues.length === 0) {
+        console.log('🎧 DJ MIND: No suitable hot cues for transition planning');
+        return null;
+      }
+
+      let bestPlan: HotCueTransitionPlan | null = null;
+      let bestScore = 0;
+
+      // Analyze all possible outro-intro combinations
+      for (const outroHotCue of outroHotCues) {
+        for (const introHotCue of introHotCues) {
+          const plan = analyzeHotCueCompatibility(
+            outroHotCue, 
+            introHotCue, 
+            currentBpm, 
+            nextBpm
+          );
+
+          if (plan.compatibilityScore > bestScore) {
+            bestScore = plan.compatibilityScore;
+            bestPlan = plan;
+          }
+        }
+      }
+
+      if (bestPlan && bestScore > 0.3) { // Minimum acceptable compatibility
+        console.log('🎧 DJ MIND: ✅ Optimal hot cue transition calculated', {
+          outroHotCue: bestPlan.outroHotCue.name,
+          introHotCue: bestPlan.introHotCue.name,
+          score: bestScore.toFixed(2),
+          bpmCompatible: bestPlan.bpmCompatible,
+          phraseAligned: bestPlan.phraseAligned
+        });
+        return bestPlan;
+      }
+
+      console.log('🎧 DJ MIND: No high-quality hot cue transitions found (best score:', bestScore.toFixed(2), ')');
+      return null;
+
+    } catch (error) {
+      console.error('🎧 DJ MIND: Error calculating hot cue transition:', error);
+      return null;
+    }
+  };
+
+  // Analyze compatibility between two hot cues
+  const analyzeHotCueCompatibility = (
+    outroHotCue: HotCue,
+    introHotCue: HotCue,
+    currentBpm?: number,
+    nextBpm?: number
+  ): HotCueTransitionPlan => {
+    let score = 0;
+    let bpmCompatible = false;
+    let phraseAligned = false;
+    const recommendedEffects: TransitionEffect[] = [];
+
+    // Score based on hot cue types
+    if (outroHotCue.type === 'phrase' && introHotCue.type === 'phrase') {
+      score += 0.4; // Phrase-to-phrase is ideal
+      phraseAligned = true;
+    } else if (outroHotCue.type === 'phrase' || introHotCue.type === 'phrase') {
+      score += 0.2; // One phrase is good
+    } else {
+      score += 0.1; // Basic cue points
+    }
+
+    // Score based on BPM compatibility
+    if (currentBpm && nextBpm) {
+      const bpmDiff = Math.abs(currentBpm - nextBpm);
+      if (bpmDiff <= 5) {
+        score += 0.3;
+        bpmCompatible = true;
+      } else if (bpmDiff <= 15) {
+        score += 0.15;
+        bpmCompatible = true;
+      } else if (bpmDiff <= 30) {
+        score += 0.05;
+        // Add filter effect for large BPM differences
+        recommendedEffects.push({
+          type: 'filter',
+          intensity: Math.min(0.8, bpmDiff / 40),
+          duration: 3.0
+        });
+      }
+    }
+
+    // Score based on hot cue names (heuristic analysis)
+    const outroName = outroHotCue.name.toLowerCase();
+    const introName = introHotCue.name.toLowerCase();
+    
+    if ((outroName.includes('outro') || outroName.includes('end')) &&
+        (introName.includes('intro') || introName.includes('start'))) {
+      score += 0.2; // Perfect structural match
+    } else if (outroName.includes('break') && introName.includes('drop')) {
+      score += 0.15; // Break to drop is good
+    } else if (outroName.includes('bridge') || introName.includes('verse')) {
+      score += 0.1; // Structural elements
+    }
+
+    // Add scratch effect for phrase-aligned transitions
+    if (phraseAligned) {
+      recommendedEffects.push({
+        type: 'scratch',
+        intensity: 0.7,
+        duration: 1.0
+      });
+    }
+
+    // Calculate recommended crossfade duration based on compatibility
+    let crossfadeDuration = 4.0; // Default
+    if (score > 0.7) {
+      crossfadeDuration = 6.0; // Longer for high-quality transitions
+    } else if (score < 0.4) {
+      crossfadeDuration = 3.0; // Shorter for basic transitions
+    }
+
+    return {
+      outroHotCue,
+      introHotCue,
+      compatibilityScore: Math.min(1.0, score),
+      bpmCompatible,
+      phraseAligned,
+      recommendedCrossfadeDuration: crossfadeDuration,
+      recommendedEffects
+    };
   };
 
   const calculateBeatAlignedTransition = (currentTrack: Track, nextTrack: Track) => {
@@ -1705,6 +2155,7 @@ export const AudioPlayerProvider: React.FC<AudioPlayerProviderProps> = ({ childr
     duration: state.duration,
     currentTime: state.currentTime,
     volume: state.volume,
+    isMuted: state.isMuted,
     queue: state.queue,
     currentIndex: state.currentIndex,
     shuffle: state.shuffle,
@@ -1739,6 +2190,7 @@ export const AudioPlayerProvider: React.FC<AudioPlayerProviderProps> = ({ childr
     skipToPrevious: previousTrack,
     seek: seekTo,
     setVolume,
+    toggleMute,
     toggleShuffle,
     toggleRepeat: () => {
       const modes: ('none' | 'one' | 'all')[] = ['none', 'one', 'all'];

@@ -5,7 +5,7 @@ import MainLayout from '@/components/layout/MainLayout';
 import VirtualizedTrackList from '@/components/VirtualizedTrackList';
 import DjModeControls from '@/components/player/DjModeControls';
 import AdvancedDjControls from '@/components/player/AdvancedDjControls';
-import BpmWaveformDisplay from '@/components/player/BpmWaveformDisplay';
+import PlaylistGenerationUI from '@/components/ai/PlaylistGenerationUI';
 import { SparklesIcon, PlayIcon } from '@heroicons/react/24/outline';
 import { musicService } from '@/services/musicService';
 import { useAudioPlayer } from '@/context/AudioPlayerContext';
@@ -40,6 +40,16 @@ export default function Home() {
   const [generatingPlaylist, setGeneratingPlaylist] = useState(false);
   const [generatedPlaylist, setGeneratedPlaylist] = useState<Track[]>([]);
   const [aiThinkingMessages, setAiThinkingMessages] = useState<string[]>([]);
+  const [isTracklistCollapsed, setIsTracklistCollapsed] = useState(true);
+  const [isDjPanelCollapsed, setIsDjPanelCollapsed] = useState(false);
+  
+  // New state for enhanced UI
+  const [generationStage, setGenerationStage] = useState<'idle' | 'analyzing_vibe' | 'searching_library' | 'matching_tracks' | 'optimizing_order' | 'finalizing' | 'complete'>('idle');
+  const [stageNumber, setStageNumber] = useState(0);
+  const [stageProgress, setStageProgress] = useState(0);
+  const [stageMessage, setStageMessage] = useState('');
+  const [foundTracks, setFoundTracks] = useState<any[]>([]);
+  const [detectedMood, setDetectedMood] = useState<{ genres: string[], energy: number, mood: string } | undefined>();
   
   // Use audio player context
   const { 
@@ -145,6 +155,11 @@ export default function Home() {
     setGeneratingPlaylist(true);
     setAiThinkingMessages([]);
     setGeneratedPlaylist([]);
+    setGenerationStage('analyzing_vibe');
+    setStageNumber(1);
+    setStageProgress(0);
+    setFoundTracks([]);
+    setDetectedMood(undefined);
     
     try {
       const eventSource = new EventSource(
@@ -157,15 +172,45 @@ export default function Home() {
       eventSource.onmessage = (event) => {
         const data = JSON.parse(event.data);
         
+        // Handle old format for backwards compatibility
         if (data.type === 'thinking' || data.type === 'status') {
           setAiThinkingMessages(prev => [...prev, data.message]);
-        } else if (data.type === 'complete') {
+          setStageMessage(data.message);
+        } 
+        // Handle new enhanced format
+        else if (data.type === 'stage_update') {
+          setGenerationStage(data.stage);
+          setStageNumber(data.stage_number);
+          setStageProgress(data.progress);
+          setStageMessage(data.message);
+          
+          // Handle mood detection data
+          if (data.data && data.data.detected_genres) {
+            setDetectedMood({
+              genres: data.data.detected_genres,
+              energy: data.data.energy_level || 0.5,
+              mood: data.data.mood || 'analyzing'
+            });
+          }
+        } 
+        else if (data.type === 'track_found') {
+          setFoundTracks(prev => [...prev, data.track]);
+          setStageProgress(data.current_count / data.target_count);
+        }
+        else if (data.type === 'optimization') {
+          setStageMessage(data.message);
+          setStageProgress(data.progress);
+        }
+        else if (data.type === 'complete') {
           setGeneratedPlaylist(data.playlist || []);
           setGeneratingPlaylist(false);
+          setGenerationStage('complete');
           eventSource.close();
-        } else if (data.type === 'error') {
+        } 
+        else if (data.type === 'error') {
           setError(data.message);
           setGeneratingPlaylist(false);
+          setGenerationStage('idle');
           eventSource.close();
         }
       };
@@ -174,6 +219,7 @@ export default function Home() {
         console.error('EventSource error:', error);
         setError('Failed to generate playlist. Make sure the AI service is running.');
         setGeneratingPlaylist(false);
+        setGenerationStage('idle');
         eventSource.close();
       };
 
@@ -181,6 +227,7 @@ export default function Home() {
       console.error('Error generating playlist:', err);
       setError('Failed to generate playlist. Make sure the AI service is running.');
       setGeneratingPlaylist(false);
+      setGenerationStage('idle');
     }
   };
 
@@ -196,11 +243,14 @@ export default function Home() {
 
   return (
     <MainLayout>
-      <div className="space-y-8">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <h1 className="text-3xl font-bold">Current Session</h1>
-        </div>
+      <div className="h-full flex flex-col overflow-hidden">
+        {/* Fixed content area */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="p-6 space-y-6">
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <h1 className="text-3xl font-bold">Current Session</h1>
+            </div>
 
         {/* Vibe-Based Playlist Generator */}
         <div className="bg-gradient-to-br from-purple-900/40 to-pink-900/40 rounded-xl p-6 border border-purple-500/30">
@@ -212,7 +262,7 @@ export default function Home() {
           <div className="space-y-4">
             <div>
               <label htmlFor="vibe-input" className="block text-sm font-medium mb-2">
-                Describe the vibe you want (e.g., "energetic hip-hop for working out", "chill R&B for late night", "upbeat dance music")
+                Describe the vibe you want (e.g., &ldquo;energetic hip-hop for working out&rdquo;, &ldquo;chill R&B for late night&rdquo;, &ldquo;upbeat dance music&rdquo;)
               </label>
               <input
                 id="vibe-input"
@@ -226,31 +276,29 @@ export default function Home() {
               />
             </div>
             
-            <button
-              onClick={handleGenerateVibePlaylist}
-              disabled={!vibeInput.trim() || generatingPlaylist}
-              className="px-6 py-3 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg text-white font-medium transition"
-            >
-              {generatingPlaylist ? '🤖 Creating Playlist...' : '✨ Generate Playlist'}
-            </button>
+            {!generatingPlaylist && (
+              <button
+                onClick={handleGenerateVibePlaylist}
+                disabled={!vibeInput.trim()}
+                className="px-6 py-3 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg text-white font-medium transition"
+              >
+                ✨ Generate Playlist
+              </button>
+            )}
           </div>
 
-          {/* AI Thinking Process Display */}
-          {generatingPlaylist && aiThinkingMessages.length > 0 && (
-            <div className="mt-6 p-4 bg-black/40 rounded-lg border border-purple-500/20">
-              <h4 className="font-medium text-sm text-purple-400 mb-3">AI DJ is thinking...</h4>
-              <div className="space-y-1 max-h-48 overflow-y-auto text-xs font-mono">
-                {aiThinkingMessages.map((message, index) => (
-                  <div 
-                    key={index} 
-                    className="text-gray-300 animate-fadeIn"
-                    style={{ animationDelay: `${index * 0.1}s` }}
-                  >
-                    {message}
-                  </div>
-                ))}
-              </div>
-            </div>
+          {/* Enhanced AI Generation UI */}
+          {generatingPlaylist && (
+            <PlaylistGenerationUI
+              stage={generationStage}
+              stageNumber={stageNumber}
+              totalStages={5}
+              progress={stageProgress}
+              message={stageMessage}
+              foundTracks={foundTracks}
+              targetTrackCount={10}
+              detectedMood={detectedMood}
+            />
           )}
 
           {/* Generated Playlist */}
@@ -294,22 +342,43 @@ export default function Home() {
           )}
         </div>
 
-        {/* Combined DJ Controls and Beat Grid Display */}
-        {djMode && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <DjModeControls />
-            <BpmWaveformDisplay />
-          </div>
-        )}
+            {/* Combined DJ Controls - Collapsible */}
+            {djMode && (
+              <div className="bg-zinc-900/50 rounded-xl border border-zinc-700 overflow-hidden">
+                <button
+                  onClick={() => setIsDjPanelCollapsed(!isDjPanelCollapsed)}
+                  className="w-full px-6 py-4 flex items-center justify-between hover:bg-zinc-800/50 transition"
+                >
+                  <h2 className="text-xl font-semibold">DJ Controls</h2>
+                  <span className="text-gray-400">
+                    {isDjPanelCollapsed ? '▶' : '▼'}
+                  </span>
+                </button>
+                {!isDjPanelCollapsed && (
+                  <div className="p-6 pt-0 space-y-6">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                      <DjModeControls />
+                    </div>
+                    {/* Advanced DJ Controls */}
+                    <AdvancedDjControls />
+                  </div>
+                )}
+              </div>
+            )}
 
-        {/* Advanced DJ Controls - Collapsible */}
-        <AdvancedDjControls />
-
-        {/* Music Library */}
-        <div className="bg-zinc-900/50 rounded-xl p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold">Music Library ({tracks.length} tracks)</h2>
-            <div className="flex items-center gap-2">
+            {/* Music Library - Collapsible with fixed height scrollable list */}
+            <div className="bg-zinc-900/50 rounded-xl border border-zinc-700 overflow-hidden">
+              <div className="px-6 py-4 flex items-center justify-between hover:bg-zinc-800/50 transition">
+                <button
+                  onClick={() => setIsTracklistCollapsed(!isTracklistCollapsed)}
+                  className="flex items-center gap-2"
+                >
+                  <h2 className="text-xl font-semibold">Music Library ({tracks.length} tracks)</h2>
+                  <span className="text-gray-400">
+                    {isTracklistCollapsed ? '▶' : '▼'}
+                  </span>
+                </button>
+                <div className="flex items-center gap-2">
               <button
                 onClick={handlePlayAllShuffle}
                 disabled={tracks.length === 0}
@@ -324,49 +393,32 @@ export default function Home() {
               >
                 ▶️ Play All
               </button>
-            </div>
-          </div>
-          {loading ? (
-            <div className="text-center py-8 text-gray-400">Loading tracks...</div>
-          ) : error ? (
-            <div className="text-center py-8 text-red-400">{error}</div>
-          ) : (
-            <VirtualizedTrackList
-              tracks={tracks}
-              selectedTrackPath={selectedTrack?.filepath}
-              onTrackSelect={handleTrackSelect}
-              onTrackAnalyze={handleAnalyzeTrack}
-              onAddToQueue={handleAddToQueue}
-              isAnalyzing={analyzing}
-            />
-          )}
-        </div>
-
-        {/* Enable DJ Mode Button - Only show if not in DJ mode */}
-        {!djMode && generatedPlaylist.length === 0 && (
-          <div className="bg-gradient-to-br from-purple-900/40 to-pink-900/40 rounded-xl p-6 border border-purple-500/30">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="font-medium text-xl mb-2">Enable DJ Mode</h3>
-                <p className="text-sm text-gray-400">
-                  Turn on DJ mode for automatic mixing, beat matching, and seamless transitions
-                </p>
+                </div>
               </div>
-              <button
-                onClick={() => {
-                  toggleDjMode();
-                  if (tracks.length > 0 && !currentTrack) {
-                    const shuffled = [...tracks].sort(() => Math.random() - 0.5);
-                    playTrack(shuffled[0], shuffled);
-                  }
-                }}
-                className="px-6 py-3 bg-purple-600 hover:bg-purple-700 rounded-lg text-white font-medium transition"
-              >
-                🎧 Enable DJ Mode
-              </button>
+              {!isTracklistCollapsed && (
+                <div className="p-6 pt-0">
+                  {loading ? (
+                    <div className="text-center py-8 text-gray-400">Loading tracks...</div>
+                  ) : error ? (
+                    <div className="text-center py-8 text-red-400">{error}</div>
+                  ) : (
+                    <div className="h-96 overflow-hidden">
+                      <VirtualizedTrackList
+                        tracks={tracks}
+                        selectedTrackPath={selectedTrack?.filepath}
+                        onTrackSelect={handleTrackSelect}
+                        onTrackAnalyze={handleAnalyzeTrack}
+                        onAddToQueue={handleAddToQueue}
+                        isAnalyzing={analyzing}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
+
           </div>
-        )}
+        </div>
       </div>
     </MainLayout>
   );

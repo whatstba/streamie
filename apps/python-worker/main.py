@@ -1,5 +1,11 @@
 from dotenv import load_dotenv
-load_dotenv() 
+load_dotenv()
+
+# Set MUSIC_DIR environment variable before importing DJAgent
+import os
+MUSIC_DIR = os.path.expanduser("~/Downloads")  # We'll use Downloads folder for testing
+os.environ['MUSIC_DIR'] = MUSIC_DIR
+
 from utils.librosa import run_beat_track
 from utils.id3_reader import read_audio_metadata, extract_artwork
 from utils.db import get_db
@@ -10,7 +16,6 @@ from fastapi.responses import Response, StreamingResponse
 from utils.sqlite_db import get_sqlite_db
 
 from pydantic import BaseModel
-import os
 from typing import List, Optional, Dict, Any
 import librosa
 import mimetypes
@@ -39,9 +44,6 @@ app.add_middleware(
 
 # Include the AI router - temporarily disabled
 # app.include_router(ai_router)
-
-# Directory where music files are stored
-MUSIC_DIR = os.path.expanduser("~/Downloads")  # We'll use Downloads folder for testing
 
 class SeratoHotCue(BaseModel):
     """Serato hot cue point model"""
@@ -268,9 +270,25 @@ async def analyze_track_enhanced(filepath: str):
         energy_level = doc.get("energy_level") # energy_level from SQLite
         print(f"🎵 Database BPM: {bpm:.2f} BPM ({len(beat_times)} beats), Energy: {energy_level}")
         
-        # Serato data temporarily disabled
-        serato_info = {'hot_cues': [], 'serato_available': False}
-        hot_cues = []
+        # Enable Serato hot cue extraction
+        try:
+            from utils.serato_reader import serato_reader
+            serato_info = serato_reader.get_serato_info(file_path)
+            hot_cues = [
+                SeratoHotCue(
+                    name=cue['name'],
+                    time=cue['time'],
+                    color=cue['color'],
+                    type=cue['type'],
+                    index=cue['index']
+                )
+                for cue in serato_info.get('hot_cues', [])
+            ]
+            print(f"🎛️ Extracted {len(hot_cues)} hot cues from Serato data")
+        except Exception as e:
+            print(f"❌ Error extracting Serato hot cues: {e}")
+            serato_info = {'hot_cues': [], 'serato_available': False}
+            hot_cues = []
         
         # Suggested transitions based on BPM only (no Serato)
         suggested_transitions = {
@@ -502,10 +520,14 @@ async def generate_vibe_playlist_stream(
     from queue import Queue
     import threading
     import logging
+    from utils.dj_agent_stream import DJAgentStreamEnhancer
     
     async def event_generator():
         # Create a queue to capture log messages
         log_queue = Queue()
+        
+        # Create stream enhancer
+        stream_enhancer = DJAgentStreamEnhancer()
         
         # Custom handler to capture DJ agent logs
         class QueueHandler(logging.Handler):
@@ -519,8 +541,17 @@ async def generate_vibe_playlist_stream(
         dj_logger.addHandler(queue_handler)
         
         try:
-            # Send initial message
-            yield f"data: {json.dumps({'type': 'status', 'message': f'🎨 Starting playlist generation for: {vibe_description}'})}\n\n"
+            # Send initial stage update
+            initial_data = {
+                'type': 'stage_update',
+                'stage': 'analyzing_vibe',
+                'stage_number': 1,
+                'total_stages': 5,
+                'progress': 0.0,
+                'message': f'Starting playlist generation for: {vibe_description}',
+                'data': {}
+            }
+            yield f"data: {json.dumps(initial_data)}\n\n"
             
             # Initialize DJ agent
             dj_agent = DJAgent()
@@ -540,9 +571,10 @@ async def generate_vibe_playlist_stream(
                 # Check for new log messages
                 while not log_queue.empty():
                     log_msg = log_queue.get()
-                    # Clean up the message and send it
+                    # Process message through enhancer
                     if log_msg.strip():
-                        yield f"data: {json.dumps({'type': 'thinking', 'message': log_msg})}\n\n"
+                        enhanced_data = stream_enhancer.process_message(log_msg)
+                        yield f"data: {json.dumps(enhanced_data)}\n\n"
                 
                 # Small delay to prevent busy waiting
                 await asyncio.sleep(0.1)
@@ -554,7 +586,8 @@ async def generate_vibe_playlist_stream(
             while not log_queue.empty():
                 log_msg = log_queue.get()
                 if log_msg.strip():
-                    yield f"data: {json.dumps({'type': 'thinking', 'message': log_msg})}\n\n"
+                    enhanced_data = stream_enhancer.process_message(log_msg)
+                    yield f"data: {json.dumps(enhanced_data)}\n\n"
             
             if not result["success"]:
                 yield f"data: {json.dumps({'type': 'error', 'message': result.get('error', 'Failed to generate playlist')})}\n\n"
@@ -565,7 +598,17 @@ async def generate_vibe_playlist_stream(
             playlist_tracks = []
             
             if finalized_playlist:
-                yield f"data: {json.dumps({'type': 'status', 'message': f'✅ Processing {len(finalized_playlist)} tracks...'})}\n\n"
+                # Send finalizing stage update
+                finalizing_data = {
+                    'type': 'stage_update',
+                    'stage': 'finalizing',
+                    'stage_number': 5,
+                    'total_stages': 5,
+                    'progress': 0.5,
+                    'message': f'Processing {len(finalized_playlist)} tracks...',
+                    'data': {}
+                }
+                yield f"data: {json.dumps(finalizing_data)}\n\n"
                 
                 # Load track info from database
                 db_path = os.path.join(os.path.dirname(__file__), 'tracks.db')
