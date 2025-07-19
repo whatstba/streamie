@@ -1,10 +1,7 @@
 'use client';
 
 import React from 'react';
-import {
-  MusicalNoteIcon,
-  ForwardIcon,
-} from '@heroicons/react/24/outline';
+import { MusicalNoteIcon, ForwardIcon } from '@heroicons/react/24/outline';
 import { useAudioPlayer } from '@/context/AudioPlayerContext';
 import { musicService } from '@/services/musicService';
 
@@ -18,6 +15,10 @@ const DjModeControls: React.FC = () => {
     nextTrack,
     timeUntilTransition,
     forceTransition,
+    currentTrack,
+    sourceBpm,
+    targetBpm,
+    bpmSyncEnabled,
   } = useAudioPlayer();
 
   const formatTime = (seconds: number): string => {
@@ -34,14 +35,22 @@ const DjModeControls: React.FC = () => {
   return (
     <div className="bg-zinc-900/50 rounded-xl p-6 border border-zinc-500/30">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold text-white">Next Track</h3>
+        <div>
+          <h3 className="text-lg font-semibold text-white">Next Track</h3>
+          {currentTrack && sourceBpm && (
+            <p className="text-xs text-gray-400 mt-1">Current: {sourceBpm.toFixed(1)} BPM</p>
+          )}
+        </div>
         <div className="flex items-center gap-2">
+          {bpmSyncEnabled && (
+            <span className="text-xs text-blue-400 bg-blue-400/20 px-2 py-1 rounded">BPM Sync</span>
+          )}
           {autoTransition && (
             <span className="text-xs text-green-400 bg-green-400/20 px-2 py-1 rounded">
               Auto-Mix ON
             </span>
           )}
-          
+
           {nextTrack && !isTransitioning && (
             <button
               onClick={forceTransition}
@@ -54,7 +63,6 @@ const DjModeControls: React.FC = () => {
           )}
         </div>
       </div>
-
 
       {/* Transition Progress */}
       {isTransitioning && (
@@ -79,14 +87,15 @@ const DjModeControls: React.FC = () => {
             <span className="text-sm text-gray-400">Next Track</span>
             {autoTransition && timeUntilTransition > 0 && (
               <span className="text-sm text-orange-400">
-                {mixMode === 'interval' ? 'Mix' : mixMode === 'hot-cue' ? 'Hot Cue' : 'Transition'} in {formatTime(timeUntilTransition)}
+                {mixMode === 'interval' ? 'Mix' : mixMode === 'hot-cue' ? 'Hot Cue' : 'Transition'}{' '}
+                in {formatTime(timeUntilTransition)}
               </span>
             )}
           </div>
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 bg-zinc-800 rounded flex items-center justify-center overflow-hidden">
               {nextTrack.has_artwork ? (
-                <img 
+                <img
                   src={musicService.getArtworkUrl(nextTrack.filepath)}
                   alt={`${nextTrack.title || nextTrack.filename} cover`}
                   className="w-full h-full object-cover"
@@ -97,7 +106,9 @@ const DjModeControls: React.FC = () => {
                   }}
                 />
               ) : null}
-              <MusicalNoteIcon className={`w-6 h-6 text-gray-400 ${nextTrack.has_artwork ? 'hidden' : ''}`} />
+              <MusicalNoteIcon
+                className={`w-6 h-6 text-gray-400 ${nextTrack.has_artwork ? 'hidden' : ''}`}
+              />
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-white truncate">
@@ -106,6 +117,27 @@ const DjModeControls: React.FC = () => {
               <p className="text-xs text-gray-400 truncate">
                 {nextTrack.artist || 'Unknown Artist'}
               </p>
+            </div>
+            {/* BPM Display */}
+            <div className="text-right">
+              <div className="text-sm font-mono text-purple-400">
+                {targetBpm
+                  ? `${targetBpm.toFixed(1)} BPM`
+                  : nextTrack.bpm
+                    ? `${nextTrack.bpm} BPM`
+                    : '--'}
+              </div>
+              {sourceBpm && targetBpm && (
+                <div className="text-xs text-gray-500">
+                  {Math.abs(sourceBpm - targetBpm) <= 5 ? (
+                    <span className="text-green-400">✓ Match</span>
+                  ) : Math.abs(sourceBpm - targetBpm) <= 15 ? (
+                    <span className="text-yellow-400">~ Close</span>
+                  ) : (
+                    <span className="text-orange-400">⚡ Diff</span>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -119,4 +151,4 @@ const DjModeControls: React.FC = () => {
   );
 };
 
-export default DjModeControls; 
+export default DjModeControls;

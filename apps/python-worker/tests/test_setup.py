@@ -1,8 +1,8 @@
 """
 Basic test to verify pytest setup is working correctly.
 """
+
 import pytest
-from fastapi.testclient import TestClient
 
 
 def test_pytest_setup():
@@ -29,6 +29,7 @@ def test_fastapi_client(test_client):
 async def test_async_support():
     """Test that async tests work."""
     import asyncio
+
     await asyncio.sleep(0.1)
     assert True
 
@@ -36,6 +37,7 @@ async def test_async_support():
 def test_mocking_works():
     """Test that mocking is configured."""
     from unittest.mock import Mock
+
     mock = Mock()
     mock.return_value = "mocked"
     assert mock() == "mocked"

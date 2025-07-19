@@ -10,16 +10,16 @@ import KeyboardShortcutsHelp from './KeyboardShortcutsHelp';
 import QueueManager from './QueueManager';
 
 const Player = () => {
-  const { 
-    currentTrack, 
-    djMode, 
-    isTransitioning, 
+  const {
+    currentTrack,
+    djMode,
+    isTransitioning,
     transitionProgress,
     timeUntilTransition,
     autoTransition,
     setAutoTransition,
     forceTransition,
-    nextTrack
+    nextTrack,
   } = useAudioPlayer();
 
   const formatTime = (seconds: number): string => {
@@ -46,7 +46,7 @@ const Player = () => {
         <div className="flex-1 min-w-0 max-w-sm">
           <div className="flex items-center gap-3">
             {/*   */}
-            
+
             {nextTrack && !isTransitioning && (
               <button
                 onClick={forceTransition}
@@ -58,7 +58,7 @@ const Player = () => {
               </button>
             )}
           </div>
-          
+
           {/* DJ Mode Status */}
           {djMode && (
             <div className="mt-2 flex items-center gap-2 text-xs">
@@ -96,4 +96,4 @@ const Player = () => {
   );
 };
 
-export default Player; 
+export default Player;

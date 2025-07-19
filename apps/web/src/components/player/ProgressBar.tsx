@@ -11,7 +11,7 @@ const ProgressBar: React.FC = () => {
 
   const formatTime = (time: number): string => {
     if (!time || isNaN(time)) return '0:00';
-    
+
     const minutes = Math.floor(time / 60);
     const seconds = Math.floor(time % 60);
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
@@ -25,22 +25,22 @@ const ProgressBar: React.FC = () => {
 
   const handleMouseDown = (e: React.MouseEvent) => {
     if (!progressRef.current || !duration) return;
-    
+
     const rect = progressRef.current.getBoundingClientRect();
     const percent = (e.clientX - rect.left) / rect.width;
     const time = percent * duration;
-    
+
     setIsDragging(true);
     setDragTime(time);
   };
 
   const handleMouseMove = (e: MouseEvent) => {
     if (!isDragging || !progressRef.current || !duration) return;
-    
+
     const rect = progressRef.current.getBoundingClientRect();
     const percent = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
     const time = percent * duration;
-    
+
     setDragTime(time);
   };
 
@@ -56,7 +56,7 @@ const ProgressBar: React.FC = () => {
     if (isDragging) {
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
-      
+
       return () => {
         document.removeEventListener('mousemove', handleMouseMove);
         document.removeEventListener('mouseup', handleMouseUp);
@@ -67,9 +67,9 @@ const ProgressBar: React.FC = () => {
   // Handle keyboard navigation
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (!duration) return;
-    
+
     const currentDisplayTime = isDragging ? dragTime : currentTime;
-    
+
     switch (e.key) {
       case 'ArrowLeft':
         e.preventDefault();
@@ -111,10 +111,10 @@ const ProgressBar: React.FC = () => {
           className="absolute top-0 left-0 h-full bg-white rounded-full transition-all duration-100"
           style={{ width: `${getProgress()}%` }}
         />
-        
+
         {/* Hover Effect */}
         <div className="absolute inset-0 bg-white/20 rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
-        
+
         {/* Dragging Thumb */}
         {isDragging && (
           <div
@@ -122,25 +122,21 @@ const ProgressBar: React.FC = () => {
             style={{ left: `${getProgress()}%`, transform: 'translate(-50%, -50%)' }}
           />
         )}
-        
+
         {/* Hover Thumb */}
-        <div 
+        <div
           className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
           style={{ left: `${getProgress()}%`, transform: 'translate(-50%, -50%)' }}
         />
       </div>
-      
+
       {/* Time Display */}
       <div className="flex justify-between text-xs text-gray-400 px-1">
-        <span className="tabular-nums">
-          {formatTime(isDragging ? dragTime : currentTime)}
-        </span>
-        <span className="tabular-nums">
-          {formatTime(duration)}
-        </span>
+        <span className="tabular-nums">{formatTime(isDragging ? dragTime : currentTime)}</span>
+        <span className="tabular-nums">{formatTime(duration)}</span>
       </div>
     </div>
   );
 };
 
-export default ProgressBar; 
+export default ProgressBar;

@@ -1,7 +1,13 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { SparklesIcon, PlayIcon, QueueListIcon, StarIcon, ChartBarIcon } from '@heroicons/react/24/outline';
+import {
+  SparklesIcon,
+  PlayIcon,
+  QueueListIcon,
+  StarIcon,
+  ChartBarIcon,
+} from '@heroicons/react/24/outline';
 import { StarIcon as StarIconSolid } from '@heroicons/react/24/solid';
 import { aiService } from '@/services/aiService';
 import { useAudioPlayer } from '@/context/AudioPlayerContext';
@@ -44,7 +50,7 @@ export default function AiDjPanel({ tracks, onTrackSelect, onAddToQueue }: AiDjP
   // Update played tracks when current track changes
   useEffect(() => {
     if (currentTrack && !playedTracks.includes(currentTrack.filepath)) {
-      setPlayedTracks(prev => [...prev, currentTrack.filepath]);
+      setPlayedTracks((prev) => [...prev, currentTrack.filepath]);
     }
   }, [currentTrack, playedTracks]);
 
@@ -57,8 +63,8 @@ export default function AiDjPanel({ tracks, onTrackSelect, onAddToQueue }: AiDjP
         current_track_id: currentTrack.filepath,
         context: {
           dj_mode: djMode,
-          played_tracks: playedTracks
-        }
+          played_tracks: playedTracks,
+        },
       });
       setVibeAnalysis(analysis);
     } catch (error) {
@@ -78,8 +84,8 @@ export default function AiDjPanel({ tracks, onTrackSelect, onAddToQueue }: AiDjP
         played_tracks: playedTracks,
         context: {
           dj_mode: djMode,
-          energy_level: vibeAnalysis?.energy_level
-        }
+          energy_level: vibeAnalysis?.energy_level,
+        },
       });
       setNextSuggestion(suggestion);
     } catch (error) {
@@ -89,7 +95,9 @@ export default function AiDjPanel({ tracks, onTrackSelect, onAddToQueue }: AiDjP
     }
   };
 
-  const generateAiPlaylist = async (energyPattern: 'build_up' | 'peak_time' | 'cool_down' | 'wave' = 'wave') => {
+  const generateAiPlaylist = async (
+    energyPattern: 'build_up' | 'peak_time' | 'cool_down' | 'wave' = 'wave'
+  ) => {
     if (!currentTrack) return;
 
     setIsGeneratingPlaylist(true);
@@ -100,8 +108,8 @@ export default function AiDjPanel({ tracks, onTrackSelect, onAddToQueue }: AiDjP
         energy_pattern: energyPattern,
         context: {
           dj_mode: djMode,
-          played_tracks: playedTracks
-        }
+          played_tracks: playedTracks,
+        },
       });
       setGeneratedPlaylist(playlist.playlist);
     } catch (error) {
@@ -131,7 +139,7 @@ export default function AiDjPanel({ tracks, onTrackSelect, onAddToQueue }: AiDjP
   const playAiSuggestion = () => {
     if (nextSuggestion?.track) {
       // Find the full track object in our tracks array
-      const fullTrack = tracks.find(t => t.filepath === nextSuggestion.track.filepath);
+      const fullTrack = tracks.find((t) => t.filepath === nextSuggestion.track.filepath);
       if (fullTrack) {
         playTrack(fullTrack, tracks);
         setNextSuggestion(null); // Clear suggestion after playing
@@ -147,7 +155,8 @@ export default function AiDjPanel({ tracks, onTrackSelect, onAddToQueue }: AiDjP
           <h3 className="font-medium text-xl">AI DJ Assistant</h3>
         </div>
         <p className="text-gray-400 mb-4">
-          Enable DJ mode to access AI-powered mixing suggestions, vibe analysis, and intelligent playlist generation.
+          Enable DJ mode to access AI-powered mixing suggestions, vibe analysis, and intelligent
+          playlist generation.
         </p>
       </div>
     );
@@ -172,7 +181,7 @@ export default function AiDjPanel({ tracks, onTrackSelect, onAddToQueue }: AiDjP
             >
               {isAnalyzing ? '🧠 Analyzing...' : '🎵 Analyze Vibe'}
             </button>
-            
+
             {playedTracks.length > 1 && !showRating && (
               <button
                 onClick={() => setShowRating(true)}
@@ -209,7 +218,10 @@ export default function AiDjPanel({ tracks, onTrackSelect, onAddToQueue }: AiDjP
                   Submit
                 </button>
                 <button
-                  onClick={() => {setShowRating(false); setRating(0);}}
+                  onClick={() => {
+                    setShowRating(false);
+                    setRating(0);
+                  }}
                   className="px-3 py-1 bg-gray-600 hover:bg-gray-700 rounded text-sm font-medium transition"
                 >
                   Cancel
@@ -225,11 +237,15 @@ export default function AiDjPanel({ tracks, onTrackSelect, onAddToQueue }: AiDjP
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
                   <span className="text-gray-400">Dominant Vibe:</span>
-                  <span className="ml-2 font-medium text-blue-400">{vibeAnalysis.dominant_vibe}</span>
+                  <span className="ml-2 font-medium text-blue-400">
+                    {vibeAnalysis.dominant_vibe}
+                  </span>
                 </div>
                 <div>
                   <span className="text-gray-400">Energy Level:</span>
-                  <span className="ml-2 font-medium text-green-400">{(vibeAnalysis.energy_level * 100).toFixed(0)}%</span>
+                  <span className="ml-2 font-medium text-green-400">
+                    {(vibeAnalysis.energy_level * 100).toFixed(0)}%
+                  </span>
                 </div>
                 <div>
                   <span className="text-gray-400">Genre:</span>
@@ -237,7 +253,9 @@ export default function AiDjPanel({ tracks, onTrackSelect, onAddToQueue }: AiDjP
                 </div>
                 <div>
                   <span className="text-gray-400">BPM:</span>
-                  <span className="ml-2 font-medium text-orange-400">{vibeAnalysis.bpm.toFixed(1)}</span>
+                  <span className="ml-2 font-medium text-orange-400">
+                    {vibeAnalysis.bpm.toFixed(1)}
+                  </span>
                 </div>
               </div>
             </div>
@@ -261,7 +279,8 @@ export default function AiDjPanel({ tracks, onTrackSelect, onAddToQueue }: AiDjP
                       {nextSuggestion.track.title || nextSuggestion.track.filename}
                     </p>
                     <p className="text-xs text-gray-400">
-                      {nextSuggestion.track.artist} • {(nextSuggestion.confidence * 100).toFixed(0)}% match
+                      {nextSuggestion.track.artist} • {(nextSuggestion.confidence * 100).toFixed(0)}
+                      % match
                     </p>
                     {nextSuggestion.reasoning && (
                       <p className="text-xs text-green-400 mt-1">{nextSuggestion.reasoning}</p>
@@ -312,7 +331,9 @@ export default function AiDjPanel({ tracks, onTrackSelect, onAddToQueue }: AiDjP
             </div>
 
             {isGeneratingPlaylist && (
-              <p className="text-yellow-400 animate-pulse text-sm">🤖 AI is crafting your perfect playlist...</p>
+              <p className="text-yellow-400 animate-pulse text-sm">
+                🤖 AI is crafting your perfect playlist...
+              </p>
             )}
 
             {/* Generated Playlist */}
@@ -324,7 +345,10 @@ export default function AiDjPanel({ tracks, onTrackSelect, onAddToQueue }: AiDjP
                 </h4>
                 <div className="space-y-2 max-h-40 overflow-y-auto">
                   {generatedPlaylist.map((track, index) => (
-                    <div key={index} className="flex items-center justify-between text-sm p-2 bg-black/20 rounded">
+                    <div
+                      key={index}
+                      className="flex items-center justify-between text-sm p-2 bg-black/20 rounded"
+                    >
                       <div>
                         <span className="font-medium">{track.title || track.filename}</span>
                         <span className="text-gray-400 ml-2">{track.artist}</span>
@@ -353,4 +377,4 @@ export default function AiDjPanel({ tracks, onTrackSelect, onAddToQueue }: AiDjP
       )}
     </div>
   );
-} 
+}

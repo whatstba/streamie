@@ -11,7 +11,7 @@ interface AnimatedStageTextProps {
 export default function AnimatedStageText({ text, className = '' }: AnimatedStageTextProps) {
   // Split text into words for individual animation
   const words = text.split(' ');
-  
+
   return (
     <AnimatePresence mode="wait">
       <motion.div
@@ -24,21 +24,21 @@ export default function AnimatedStageText({ text, className = '' }: AnimatedStag
         {words.map((word, index) => (
           <motion.span
             key={`${word}-${index}`}
-            className="inline-block"
-            initial={{ 
-              opacity: 0, 
+            className="inline-block mr-1"
+            initial={{
+              opacity: 0,
               y: 20,
-              filter: 'blur(10px)'
+              filter: 'blur(10px)',
             }}
-            animate={{ 
-              opacity: 1, 
+            animate={{
+              opacity: 1,
               y: 0,
-              filter: 'blur(0px)'
+              filter: 'blur(0px)',
             }}
             transition={{
               duration: 0.5,
               delay: index * 0.1,
-              ease: [0.25, 0.1, 0.25, 1]
+              ease: [0.25, 0.1, 0.25, 1],
             }}
           >
             <span className="bg-gradient-to-r from-purple-400 via-pink-400 to-purple-400 bg-clip-text text-transparent font-semibold">

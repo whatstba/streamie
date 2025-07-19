@@ -1,24 +1,12 @@
 'use client';
 
 import React from 'react';
-import {
-  PlayIcon,
-  PauseIcon,
-  ForwardIcon,
-  BackwardIcon,
-} from '@heroicons/react/24/solid';
+import { PlayIcon, PauseIcon, ForwardIcon, BackwardIcon } from '@heroicons/react/24/solid';
 import { useAudioPlayer } from '@/context/AudioPlayerContext';
 
 const AudioControls: React.FC = () => {
-  const {
-    isPlaying,
-    isLoading,
-    currentTrack,
-    pause,
-    play,
-    skipToNext,
-    skipToPrevious,
-  } = useAudioPlayer();
+  const { isPlaying, isLoading, currentTrack, pause, play, skipToNext, skipToPrevious } =
+    useAudioPlayer();
 
   const handlePlayPause = () => {
     if (isPlaying) {
@@ -68,4 +56,4 @@ const AudioControls: React.FC = () => {
   );
 };
 
-export default AudioControls; 
+export default AudioControls;

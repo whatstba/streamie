@@ -1,6 +1,7 @@
 import requests
 import os
 
+
 def search_youtube(track_title, artist):
     api_key = os.getenv("YOUTUBE_API_KEY")
     query = f"{track_title} {artist} audio"
@@ -10,4 +11,4 @@ def search_youtube(track_title, artist):
     if items:
         video_id = items[0]["id"]["videoId"]
         return f"https://www.youtube.com/watch?v={video_id}"
-    return None 
+    return None

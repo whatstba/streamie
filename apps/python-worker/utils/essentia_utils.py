@@ -1,6 +1,6 @@
 """Utilities for audio analysis using the Essentia library."""
 
-from typing import Dict, Any
+from typing import Dict
 
 try:
     from essentia.standard import MusicExtractor
@@ -17,21 +17,21 @@ def analyze_mood(file_path: str) -> Dict[str, float]:
     try:
         extractor = MusicExtractor()
         features, _ = extractor(file_path)  # Unpack the tuple properly
-        highlevel = features['highlevel'] if isinstance(features, dict) else {}
+        highlevel = features["highlevel"] if isinstance(features, dict) else {}
         mood = {}
         for key in [
-            'mood_acoustic',
-            'mood_aggressive',
-            'mood_electronic',
-            'mood_happy',
-            'mood_party',
-            'mood_relaxed',
-            'mood_sad',
+            "mood_acoustic",
+            "mood_aggressive",
+            "mood_electronic",
+            "mood_happy",
+            "mood_party",
+            "mood_relaxed",
+            "mood_sad",
         ]:
             value = highlevel.get(key, {})
             if isinstance(value, dict):
                 # Handle nested dictionary structure
-                prob_value = value.get('probability', 0.0)
+                prob_value = value.get("probability", 0.0)
                 mood[key] = float(prob_value)
             elif isinstance(value, (int, float)):
                 mood[key] = float(value)

@@ -130,7 +130,9 @@ export const aiService = {
   /**
    * Rate a transition to improve future AI suggestions
    */
-  async rateTransition(request: TransitionRatingRequest): Promise<{ success: boolean; message: string }> {
+  async rateTransition(
+    request: TransitionRatingRequest
+  ): Promise<{ success: boolean; message: string }> {
     const response = await fetch(`${AI_API_BASE_URL}/rate-transition`, {
       method: 'POST',
       headers: {
@@ -158,4 +160,4 @@ export const aiService = {
 
     return response.json();
   },
-}; 
+};

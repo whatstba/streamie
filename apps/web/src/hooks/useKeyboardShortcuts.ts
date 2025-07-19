@@ -95,4 +95,4 @@ export const useKeyboardShortcuts = () => {
     volume,
     toggleMute,
   ]);
-}; 
+};

@@ -1,6 +1,7 @@
 import requests
 import os
 
+
 def search_soundcloud(track_title, artist):
     client_id = os.getenv("SOUNDCLOUD_CLIENT_ID")
     query = f"{track_title} {artist}"
@@ -9,4 +10,4 @@ def search_soundcloud(track_title, artist):
     tracks = resp.json()
     if tracks:
         return tracks[0].get("permalink_url")
-    return None 
+    return None

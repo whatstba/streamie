@@ -13,7 +13,7 @@ import {
   ClockIcon,
   FireIcon,
   ChevronDownIcon,
-  ChevronUpIcon
+  ChevronUpIcon,
 } from '@heroicons/react/24/outline';
 
 const AdvancedDjControls: React.FC = () => {
@@ -37,7 +37,9 @@ const AdvancedDjControls: React.FC = () => {
     targetBpm,
     syncRatio,
     currentTime,
-    djMode
+    djMode,
+    applyTransitionEffect,
+    transitionEffectPlan,
   } = useAudioPlayer();
 
   const [showEffects, setShowEffects] = useState(false);
@@ -61,7 +63,7 @@ const AdvancedDjControls: React.FC = () => {
   return (
     <div className="bg-gradient-to-br from-purple-900/40 to-pink-900/40 rounded-xl border border-purple-500/30 overflow-hidden">
       {/* Header - Always visible */}
-      <div 
+      <div
         className="flex items-center gap-3 p-6 cursor-pointer hover:bg-white/5 transition-colors"
         onClick={() => setIsExpanded(!isExpanded)}
       >
@@ -91,9 +93,7 @@ const AdvancedDjControls: React.FC = () => {
                 <span className="text-gray-300">
                   {sourceBpm?.toFixed(1) || '?'} BPM
                   {bpmSyncEnabled && syncRatio !== 1 && (
-                    <span className="text-green-400 ml-1">
-                      (synced)
-                    </span>
+                    <span className="text-green-400 ml-1">(synced)</span>
                   )}
                 </span>
               </div>
@@ -133,16 +133,14 @@ const AdvancedDjControls: React.FC = () => {
                 <MusicalNoteIcon className="h-5 w-5 text-blue-400" />
                 BPM Sync
               </h3>
-              
+
               <div className="bg-black/20 rounded-lg p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-300">Auto BPM Sync</span>
                   <button
                     onClick={() => setBpmSync(!bpmSyncEnabled)}
                     className={`px-3 py-1 rounded-full text-xs font-medium transition ${
-                      bpmSyncEnabled 
-                        ? 'bg-green-600 text-white' 
-                        : 'bg-gray-600 text-gray-300'
+                      bpmSyncEnabled ? 'bg-green-600 text-white' : 'bg-gray-600 text-gray-300'
                     }`}
                   >
                     {bpmSyncEnabled ? 'ON' : 'OFF'}
@@ -173,7 +171,8 @@ const AdvancedDjControls: React.FC = () => {
                 <div className="space-y-2">
                   <label className="text-sm text-gray-300 flex items-center gap-2">
                     <AdjustmentsHorizontalIcon className="h-4 w-4" />
-                    Pitch Shift: {pitchShift > 0 ? '+' : ''}{pitchShift} cents
+                    Pitch Shift: {pitchShift > 0 ? '+' : ''}
+                    {pitchShift} cents
                   </label>
                   <input
                     ref={pitchSliderRef}
@@ -189,9 +188,7 @@ const AdvancedDjControls: React.FC = () => {
                 <button
                   onClick={toggleBeatAlignment}
                   className={`w-full px-3 py-2 rounded-lg text-sm font-medium transition ${
-                    beatAlignment 
-                      ? 'bg-purple-600 text-white' 
-                      : 'bg-gray-600 text-gray-300'
+                    beatAlignment ? 'bg-purple-600 text-white' : 'bg-gray-600 text-gray-300'
                   }`}
                 >
                   <ClockIcon className="h-4 w-4 inline mr-2" />
@@ -206,7 +203,7 @@ const AdvancedDjControls: React.FC = () => {
                 <SparklesIcon className="h-5 w-5 text-yellow-400" />
                 Hot Cues
               </h3>
-              
+
               <div className="bg-black/20 rounded-lg p-4 space-y-3">
                 <div className="flex gap-2">
                   <input
@@ -238,13 +235,14 @@ const AdvancedDjControls: React.FC = () => {
                         className="flex items-center justify-between p-2 bg-gray-800/50 rounded-lg"
                       >
                         <div className="flex items-center gap-2">
-                          <div 
+                          <div
                             className="w-3 h-3 rounded-full"
                             style={{ backgroundColor: cue.color }}
                           />
                           <span className="text-white text-sm font-medium">{cue.name}</span>
                           <span className="text-gray-400 text-xs">
-                            {Math.floor(cue.time / 60)}:{(cue.time % 60).toFixed(0).padStart(2, '0')}
+                            {Math.floor(cue.time / 60)}:
+                            {(cue.time % 60).toFixed(0).padStart(2, '0')}
                           </span>
                         </div>
                         <button
@@ -266,7 +264,7 @@ const AdvancedDjControls: React.FC = () => {
                 <SpeakerWaveIcon className="h-5 w-5 text-green-400" />
                 Creative Effects
               </h3>
-              
+
               <div className="bg-black/20 rounded-lg p-4 space-y-3">
                 <button
                   onClick={() => setShowEffects(!showEffects)}
@@ -277,31 +275,63 @@ const AdvancedDjControls: React.FC = () => {
                 </button>
 
                 {showEffects && (
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      onClick={() => triggerFilter(0.8)}
-                      className="px-3 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-white text-sm font-medium transition"
-                    >
-                      🔊 Filter Sweep
-                    </button>
-                    <button
-                      onClick={() => triggerEcho(0.6)}
-                      className="px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white text-sm font-medium transition"
-                    >
-                      🔄 Echo
-                    </button>
-                    <button
-                      onClick={() => triggerScratch(0.9)}
-                      className="px-3 py-2 bg-orange-600 hover:bg-orange-700 rounded-lg text-white text-sm font-medium transition"
-                    >
-                      🎛️ Scratch
-                    </button>
-                    <button
-                      onClick={() => triggerFilter(0.3)}
-                      className="px-3 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-white text-sm font-medium transition"
-                    >
-                      🎚️ Lo-Pass
-                    </button>
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        onClick={() => triggerFilter(0.8)}
+                        className="px-3 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-white text-sm font-medium transition"
+                      >
+                        🔊 Filter Sweep
+                      </button>
+                      <button
+                        onClick={() => triggerEcho(0.6)}
+                        className="px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white text-sm font-medium transition"
+                      >
+                        🔄 Echo
+                      </button>
+                      <button
+                        onClick={() => triggerScratch(0.9)}
+                        className="px-3 py-2 bg-orange-600 hover:bg-orange-700 rounded-lg text-white text-sm font-medium transition"
+                      >
+                        🎛️ Scratch
+                      </button>
+                      <button
+                        onClick={() => triggerFilter(0.3)}
+                        className="px-3 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-white text-sm font-medium transition"
+                      >
+                        🎚️ Lo-Pass
+                      </button>
+                    </div>
+
+                    {/* Transition Effect Plan Display */}
+                    {transitionEffectPlan && (
+                      <div className="border-t border-gray-700 pt-3">
+                        <p className="text-xs text-gray-400 mb-2">Planned Transition Effects:</p>
+                        <div className="bg-gray-800/50 rounded-lg p-3 space-y-2">
+                          <div className="text-xs text-green-400">
+                            Profile: {transitionEffectPlan.profile}
+                          </div>
+                          <div className="text-xs text-gray-300">
+                            Curve: {transitionEffectPlan.crossfade_curve}
+                          </div>
+                          <div className="space-y-1">
+                            {transitionEffectPlan.effects.map((effect, index) => (
+                              <div
+                                key={index}
+                                className="text-xs text-yellow-400 flex items-center justify-between"
+                              >
+                                <span>
+                                  {effect.type} ({(effect.intensity * 100).toFixed(0)}%)
+                                </span>
+                                <span className="text-gray-500">
+                                  @{effect.start_at}s for {effect.duration}s
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -328,14 +358,10 @@ const AdvancedDjControls: React.FC = () => {
                   <h4 className="text-white font-medium">
                     {currentTrack.title || currentTrack.filename}
                   </h4>
-                  <p className="text-gray-400 text-sm">
-                    {currentTrack.artist || 'Unknown Artist'}
-                  </p>
+                  <p className="text-gray-400 text-sm">{currentTrack.artist || 'Unknown Artist'}</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-white font-mono text-lg">
-                    {sourceBpm?.toFixed(1) || '?'} BPM
-                  </p>
+                  <p className="text-white font-mono text-lg">{sourceBpm?.toFixed(1) || '?'} BPM</p>
                   {bpmSyncEnabled && syncRatio !== 1 && (
                     <p className="text-green-400 text-sm">
                       Synced to {(sourceBpm! * syncRatio).toFixed(1)} BPM
@@ -362,4 +388,4 @@ const AdvancedDjControls: React.FC = () => {
   );
 };
 
-export default AdvancedDjControls; 
+export default AdvancedDjControls;

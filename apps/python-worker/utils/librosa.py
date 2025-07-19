@@ -1,7 +1,7 @@
 """Utility functions for audio analysis using librosa."""
 
 import librosa
-from typing import Dict, List
+from typing import Dict
 
 
 def analyze_track(file_path: str) -> Dict[str, any]:

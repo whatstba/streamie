@@ -10,7 +10,7 @@ from utils.essentia_utils import analyze_mood
 from utils.db import get_db
 from main import MUSIC_DIR
 
-AUDIO_EXTENSIONS = {'.mp3', '.m4a', '.wav', '.flac', '.ogg', '.aac', '.m4p'}
+AUDIO_EXTENSIONS = {".mp3", ".m4a", ".wav", ".flac", ".ogg", ".aac", ".m4p"}
 
 
 def iter_audio_files(base_dir: str) -> List[Path]:
@@ -50,7 +50,9 @@ def main():
             "mood": mood_label,
         }
 
-        collection.update_one({"filepath": relative_path}, {"$set": document}, upsert=True)
+        collection.update_one(
+            {"filepath": relative_path}, {"$set": document}, upsert=True
+        )
         print(
             f"Stored {file_path.name}: {analysis['bpm']:.2f} BPM, {len(analysis['beat_times'])} beats, mood={mood_label}"
         )

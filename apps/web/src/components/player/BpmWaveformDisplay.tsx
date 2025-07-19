@@ -13,7 +13,7 @@ const BpmWaveformDisplay: React.FC = () => {
     addHotCue,
     djMode,
     sourceBpm,
-    isPlaying
+    isPlaying,
   } = useAudioPlayer();
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -74,15 +74,15 @@ const BpmWaveformDisplay: React.FC = () => {
     if (sourceBpm && sourceBpm > 0) {
       const beatDuration = 60 / sourceBpm; // seconds per beat
       const beatsToShow = Math.ceil(duration / beatDuration);
-      
+
       ctx.strokeStyle = '#fbbf24';
       ctx.lineWidth = 1;
       ctx.setLineDash([2, 4]);
-      
+
       for (let beat = 0; beat < beatsToShow; beat++) {
         const beatTime = beat * beatDuration;
         const beatX = (beatTime / duration) * canvasWidth;
-        
+
         if (beat % 4 === 0) {
           // Stronger line for downbeats
           ctx.lineWidth = 2;
@@ -91,7 +91,7 @@ const BpmWaveformDisplay: React.FC = () => {
           ctx.lineWidth = 1;
           ctx.strokeStyle = '#fbbf24';
         }
-        
+
         ctx.beginPath();
         ctx.moveTo(beatX, 0);
         ctx.lineTo(beatX, canvasHeight);
@@ -105,11 +105,11 @@ const BpmWaveformDisplay: React.FC = () => {
       const trackCues = hotCues[currentTrack.filepath] || [];
       trackCues.forEach((cue) => {
         const cueX = (cue.time / duration) * canvasWidth;
-        
+
         // Draw cue marker
         ctx.fillStyle = cue.color;
         ctx.fillRect(cueX - 2, 0, 4, canvasHeight);
-        
+
         // Draw cue label
         ctx.fillStyle = '#ffffff';
         ctx.font = '10px monospace';
@@ -128,7 +128,6 @@ const BpmWaveformDisplay: React.FC = () => {
       const timeText = `${minutes}:${seconds.toString().padStart(2, '0')}`;
       ctx.fillText(timeText, x - 15, canvasHeight - 5);
     });
-
   }, [currentTime, duration, canvasWidth, sourceBpm, hotCues, currentTrack]);
 
   const handleCanvasClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
@@ -158,7 +157,7 @@ const BpmWaveformDisplay: React.FC = () => {
     const rect = canvas.getBoundingClientRect();
     const x = event.clientX - rect.left;
     const seekTime = Math.max(0, Math.min(duration, (x / canvasWidth) * duration));
-    
+
     seek(seekTime);
   };
 
@@ -171,14 +170,8 @@ const BpmWaveformDisplay: React.FC = () => {
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-lg font-semibold text-white">Beat Grid</h3>
         <div className="flex items-center gap-4 text-sm">
-          {sourceBpm && (
-            <div className="text-blue-400 font-mono">
-              {sourceBpm.toFixed(1)} BPM
-            </div>
-          )}
-          <div className="text-gray-500 text-xs">
-            Shift+Click for cue
-          </div>
+          {sourceBpm && <div className="text-blue-400 font-mono">{sourceBpm.toFixed(1)} BPM</div>}
+          <div className="text-gray-500 text-xs">Shift+Click for cue</div>
         </div>
       </div>
 
@@ -205,7 +198,7 @@ const BpmWaveformDisplay: React.FC = () => {
           </div>
           <div>
             <span className="text-gray-500">Total Beats:</span>{' '}
-            <span className="text-white font-mono">{Math.floor(duration * sourceBpm / 60)}</span>
+            <span className="text-white font-mono">{Math.floor((duration * sourceBpm) / 60)}</span>
           </div>
           <div>
             <span className="text-gray-500">Hot Cues:</span>{' '}
@@ -219,4 +212,4 @@ const BpmWaveformDisplay: React.FC = () => {
   );
 };
 
-export default BpmWaveformDisplay; 
+export default BpmWaveformDisplay;

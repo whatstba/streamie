@@ -74,25 +74,24 @@ async def analyze_vibe(request: VibeAnalysisRequest):
     try:
         # Get suggestion which includes vibe analysis
         result = await dj_agent.suggest_next_track(
-            request.current_track_id,
-            request.context
+            request.current_track_id, request.context
         )
-        
+
         if "error" in result:
             raise HTTPException(status_code=404, detail=result["error"])
-        
+
         vibe = result["vibe_analysis"]
-        
+
         # Get top 5 recommendations
         full_playlist = await dj_agent.generate_playlist(
             request.current_track_id,
             length=5,
             energy_pattern="wave",
-            context=request.context
+            context=request.context,
         )
-        
+
         recommendations = [track["filepath"] for track in full_playlist["playlist"]]
-        
+
         return VibeAnalysisResponse(
             track_id=vibe["track_id"],
             bpm=vibe["bpm"],
@@ -100,9 +99,9 @@ async def analyze_vibe(request: VibeAnalysisRequest):
             dominant_vibe=vibe["dominant_vibe"],
             mood_vector=vibe["mood_vector"],
             genre=vibe["genre"],
-            recommendations=recommendations
+            recommendations=recommendations,
         )
-        
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -115,14 +114,14 @@ async def generate_playlist(request: PlaylistGenerationRequest):
             seed_track_id=request.seed_track_id,
             length=request.playlist_length,
             energy_pattern=request.energy_pattern,
-            context=request.context
+            context=request.context,
         )
-        
+
         if "error" in result:
             raise HTTPException(status_code=404, detail=result["error"])
-        
+
         return PlaylistResponse(**result)
-        
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -136,26 +135,25 @@ async def suggest_next_track(request: NextTrackRequest):
         context["played_tracks"] = request.played_tracks
         if request.desired_vibe:
             context["desired_vibe"] = request.desired_vibe
-        
-        result = await dj_agent.suggest_next_track(
-            request.current_track_id,
-            context
-        )
-        
+
+        result = await dj_agent.suggest_next_track(request.current_track_id, context)
+
         if "error" in result:
             raise HTTPException(status_code=404, detail=result["error"])
-        
+
         # Add reasoning based on the analysis
-        reasoning = f"Selected based on {result['vibe_analysis']['dominant_vibe']} vibe, "
+        reasoning = (
+            f"Selected based on {result['vibe_analysis']['dominant_vibe']} vibe, "
+        )
         reasoning += f"{result['confidence']:.0%} confidence match"
-        
+
         return TrackSuggestion(
             track=result["track"],
             confidence=result["confidence"],
             transition=result["transition"],
-            reasoning=reasoning
+            reasoning=reasoning,
         )
-        
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -166,29 +164,34 @@ async def rate_transition(request: TransitionRatingRequest):
     try:
         # Store the rating in the database for learning
         from utils.db import get_db
+
         db = get_db()
-        
+
         rating_doc = {
             "from_track": request.from_track_id,
             "to_track": request.to_track_id,
             "rating": request.rating,
             "notes": request.notes,
-            "timestamp": asyncio.get_event_loop().time()
+            "timestamp": asyncio.get_event_loop().time(),
         }
-        
+
         db.transition_ratings.insert_one(rating_doc)
-        
+
         # Update mixing history for both tracks
         db.tracks.update_one(
             {"filepath": request.from_track_id},
-            {"$push": {"mixing_history": {
-                "to_track": request.to_track_id,
-                "rating": request.rating
-            }}}
+            {
+                "$push": {
+                    "mixing_history": {
+                        "to_track": request.to_track_id,
+                        "rating": request.rating,
+                    }
+                }
+            },
         )
-        
+
         return {"success": True, "message": "Rating recorded"}
-        
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -198,39 +201,46 @@ async def get_mixing_insights():
     """Get insights from mixing history and patterns."""
     try:
         from utils.db import get_db
+
         db = get_db()
-        
+
         # Aggregate successful transitions
         pipeline = [
             {"$match": {"rating": {"$gte": 0.7}}},
-            {"$group": {
-                "_id": {"from": "$from_track", "to": "$to_track"},
-                "avg_rating": {"$avg": "$rating"},
-                "count": {"$sum": 1}
-            }},
+            {
+                "$group": {
+                    "_id": {"from": "$from_track", "to": "$to_track"},
+                    "avg_rating": {"$avg": "$rating"},
+                    "count": {"$sum": 1},
+                }
+            },
             {"$sort": {"avg_rating": -1}},
-            {"$limit": 10}
+            {"$limit": 10},
         ]
-        
+
         top_transitions = list(db.transition_ratings.aggregate(pipeline))
-        
+
         # Get most mixed tracks
-        most_mixed = db.tracks.aggregate([
-            {"$project": {
-                "filepath": 1,
-                "title": 1,
-                "artist": 1,
-                "mix_count": {"$size": {"$ifNull": ["$mixing_history", []]}}
-            }},
-            {"$sort": {"mix_count": -1}},
-            {"$limit": 10}
-        ])
-        
+        most_mixed = db.tracks.aggregate(
+            [
+                {
+                    "$project": {
+                        "filepath": 1,
+                        "title": 1,
+                        "artist": 1,
+                        "mix_count": {"$size": {"$ifNull": ["$mixing_history", []]}},
+                    }
+                },
+                {"$sort": {"mix_count": -1}},
+                {"$limit": 10},
+            ]
+        )
+
         return {
             "top_transitions": top_transitions,
             "most_mixed_tracks": list(most_mixed),
-            "total_ratings": db.transition_ratings.count_documents({})
+            "total_ratings": db.transition_ratings.count_documents({}),
         }
-        
+
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)) 
+        raise HTTPException(status_code=500, detail=str(e))

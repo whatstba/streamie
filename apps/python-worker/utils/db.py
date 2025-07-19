@@ -1,5 +1,4 @@
 import os
-from urllib.parse import quote_plus
 from pymongo import MongoClient
 
 MONGODB_PASSWORD = os.getenv("MONGO_DB_PW", "")
@@ -8,6 +7,7 @@ MONGODB_URI = f"mongodb+srv://lyn:{MONGODB_PASSWORD}@dev.5umbita.mongodb.net/?re
 DATABASE_NAME = os.getenv("MONGODB_DB", "streamie")
 
 _client = None
+
 
 def get_db():
     """Return a MongoDB database connection."""

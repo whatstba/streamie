@@ -1,6 +1,7 @@
 """
 Basic tests to verify the testing framework is working.
 """
+
 import pytest
 from unittest.mock import Mock, patch
 from tests.fixtures.mock_data import MOCK_TRACKS_DB, MOCK_BEAT_TRACK_RESPONSE
@@ -24,14 +25,16 @@ def test_basic_mocking():
 async def test_async_test():
     """Test async test support."""
     import asyncio
+
     result = await asyncio.sleep(0, result="test")
     assert result == "test"
 
 
 def test_patching():
     """Test patching functionality."""
-    with patch('os.path.exists') as mock_exists:
+    with patch("os.path.exists") as mock_exists:
         mock_exists.return_value = True
         import os
+
         assert os.path.exists("/fake/path") is True
         mock_exists.assert_called_with("/fake/path")

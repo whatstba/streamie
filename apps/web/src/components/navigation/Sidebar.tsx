@@ -1,16 +1,26 @@
 'use client';
 
 import React from 'react';
-import { HomeIcon, MicrophoneIcon, SparklesIcon, HeartIcon, PlayIcon, PauseIcon, ClockIcon, MusicalNoteIcon, Cog6ToothIcon } from '@heroicons/react/24/outline';
+import {
+  HomeIcon,
+  MicrophoneIcon,
+  SparklesIcon,
+  HeartIcon,
+  PlayIcon,
+  PauseIcon,
+  ClockIcon,
+  MusicalNoteIcon,
+  Cog6ToothIcon,
+} from '@heroicons/react/24/outline';
 import { useAudioPlayer } from '@/context/AudioPlayerContext';
 import { musicService } from '@/services/musicService';
 import Image from 'next/image';
 
 const Sidebar = () => {
-  const { 
-    currentTrack, 
-    isPlaying, 
-    djMode, 
+  const {
+    currentTrack,
+    isPlaying,
+    djMode,
     toggleDjMode,
     nextTrack: upcomingTrack,
     isTransitioning,
@@ -21,7 +31,7 @@ const Sidebar = () => {
     mixMode,
     setMixMode,
     mixInterval,
-    setMixInterval
+    setMixInterval,
   } = useAudioPlayer();
 
   const formatDuration = (duration: number): string => {
@@ -70,7 +80,7 @@ const Sidebar = () => {
           </div>
         )}
       </div> */}
-      
+
       <nav className="space-y-4">
         <a href="#" className="flex items-center gap-3 text-gray-300 hover:text-white transition">
           <HomeIcon className="h-6 w-6" />
@@ -88,7 +98,7 @@ const Sidebar = () => {
           <h2 className="text-sm font-semibold text-gray-400 mb-3 uppercase tracking-wide">
             Now Playing
           </h2>
-          
+
           <div className="flex gap-3 mb-3">
             {currentTrack.has_artwork ? (
               <div className="w-16 h-16 rounded-lg overflow-hidden bg-zinc-800 relative flex-shrink-0">
@@ -108,12 +118,18 @@ const Sidebar = () => {
                 ♪
               </div>
             )}
-            
+
             <div className="flex-1 min-w-0">
-              <p className="font-medium text-white truncate" title={currentTrack.title || currentTrack.filename}>
+              <p
+                className="font-medium text-white truncate"
+                title={currentTrack.title || currentTrack.filename}
+              >
                 {currentTrack.title || currentTrack.filename}
               </p>
-              <p className="text-sm text-gray-400 truncate" title={currentTrack.artist || 'Unknown Artist'}>
+              <p
+                className="text-sm text-gray-400 truncate"
+                title={currentTrack.artist || 'Unknown Artist'}
+              >
                 {currentTrack.artist || 'Unknown Artist'}
               </p>
               <div className="flex items-center gap-2 mt-1">
@@ -131,7 +147,7 @@ const Sidebar = () => {
 
           {/* Progress Bar */}
           <div className="w-full bg-gray-700 rounded-full h-1 mb-3">
-            <div 
+            <div
               className="bg-purple-500 h-1 rounded-full transition-all duration-300"
               style={{ width: duration > 0 ? `${(currentTime / duration) * 100}%` : '0%' }}
             ></div>
@@ -163,10 +179,16 @@ const Sidebar = () => {
                   </div>
                 )}
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-white truncate" title={upcomingTrack.title || upcomingTrack.filename}>
+                  <p
+                    className="text-sm font-medium text-white truncate"
+                    title={upcomingTrack.title || upcomingTrack.filename}
+                  >
                     {upcomingTrack.title || upcomingTrack.filename}
                   </p>
-                  <p className="text-xs text-gray-400 truncate" title={upcomingTrack.artist || 'Unknown Artist'}>
+                  <p
+                    className="text-xs text-gray-400 truncate"
+                    title={upcomingTrack.artist || 'Unknown Artist'}
+                  >
                     {upcomingTrack.artist || 'Unknown Artist'}
                   </p>
                 </div>
@@ -182,16 +204,14 @@ const Sidebar = () => {
           <h2 className="text-sm font-semibold text-gray-400 mb-3 uppercase tracking-wide">
             Mix Settings
           </h2>
-          
+
           {/* Auto Transition Toggle */}
           <div className="flex items-center justify-between mb-4">
             <span className="text-sm text-gray-300">Auto-Mix</span>
             <button
               onClick={() => setAutoTransition(!autoTransition)}
               className={`px-3 py-1 rounded-full text-xs font-medium transition ${
-                autoTransition 
-                  ? 'bg-green-600 text-white' 
-                  : 'bg-gray-600 text-gray-300'
+                autoTransition ? 'bg-green-600 text-white' : 'bg-gray-600 text-gray-300'
               }`}
             >
               {autoTransition ? 'ON' : 'OFF'}
@@ -244,9 +264,7 @@ const Sidebar = () => {
           {/* Interval Settings */}
           {mixMode === 'interval' && (
             <div className="mt-4 space-y-2">
-              <label className="text-xs text-gray-400 uppercase tracking-wide">
-                Mix Interval
-              </label>
+              <label className="text-xs text-gray-400 uppercase tracking-wide">Mix Interval</label>
               <div className="grid grid-cols-3 gap-1">
                 <button
                   onClick={() => setMixInterval(30)}
@@ -305,4 +323,4 @@ const Sidebar = () => {
   );
 };
 
-export default Sidebar; 
+export default Sidebar;

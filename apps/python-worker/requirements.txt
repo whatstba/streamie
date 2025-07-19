@@ -34,3 +34,5 @@ pytest-mock>=3.11.0
 pytest-cov>=4.1.0
 httpx>=0.24.0
 faker>=19.0.0
+# File system monitoring
+watchdog>=3.0.0
