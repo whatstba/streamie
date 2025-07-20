@@ -1,6 +1,7 @@
-# Streamie - AI-Powered DJ Music Player
+# Streamie - LLM Powered DJ Music Player
+<img width="1512" height="945" alt="Screenshot 2025-07-19 at 7 44 30 PM" src="https://github.com/user-attachments/assets/b5ce5354-ab11-496d-9432-82bebef9d815" />
 
-A modern music player and DJ experience featuring AI-powered playlist generation, intelligent beat mixing, and automated transitions. Built with Next.js, React, and FastAPI.
+A modern music player and DJ experience featuring playlist generation, intelligent beat mixing, and automated transitions. Built with Next.js, React, and FastAPI.
 
 
 ## 🚀 Getting Started
@@ -76,10 +77,9 @@ A modern music player and DJ experience featuring AI-powered playlist generation
 - **Database**: SQLite with enhanced metadata storage
 - **Streaming**: HTTP range requests for efficient audio delivery
 
-## 🎵 AI Models
+## 🎵 Models
 
-Streamie uses specialized AI models for different aspects of the DJ experience:
-
+Defualt model setup:
 - **Vibe Analyst** (gpt-4.1-mini): Interprets natural language playlist requests
 - **Track Evaluator** (gpt-4.1-mini): Scores tracks for playlist suitability
 - **Transition Master** (gpt-4.1-mini): Plans professional transitions between tracks
