@@ -1,13 +1,14 @@
 from pydub import AudioSegment
 import os
 
+
 class ScratchSim:
     def __init__(self, file_path):
         self.original = AudioSegment.from_file(file_path)
         self.sample_rate = self.original.frame_rate
 
     def _slice(self, start_ms, duration_ms):
-        return self.original[start_ms:start_ms + duration_ms]
+        return self.original[start_ms : start_ms + duration_ms]
 
     def baby_scratch(self, start_ms, duration_ms=150, reps=4):
         scratch = AudioSegment.silent(duration=0)

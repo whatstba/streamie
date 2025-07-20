@@ -4,7 +4,12 @@ import React, { useMemo, useState } from 'react';
 import { List, AutoSizer, ListRowProps } from 'react-virtualized';
 import Image from 'next/image';
 import { musicService } from '@/services/musicService';
-import { MagnifyingGlassIcon, MusicalNoteIcon, PlayIcon, PlusIcon } from '@heroicons/react/24/outline';
+import {
+  MagnifyingGlassIcon,
+  MusicalNoteIcon,
+  PlayIcon,
+  PlusIcon,
+} from '@heroicons/react/24/outline';
 import { useAudioPlayer } from '@/context/AudioPlayerContext';
 
 interface Track {
@@ -34,7 +39,7 @@ const VirtualizedTrackList: React.FC<VirtualizedTrackListProps> = ({
   onTrackSelect,
   onTrackAnalyze,
   onAddToQueue,
-  isAnalyzing = false
+  isAnalyzing = false,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const { playTrack, currentTrack, isPlaying, queue, djMode } = useAudioPlayer();
@@ -42,13 +47,14 @@ const VirtualizedTrackList: React.FC<VirtualizedTrackListProps> = ({
   // Filter tracks based on search term
   const filteredTracks = useMemo(() => {
     if (!searchTerm.trim()) return tracks;
-    
+
     const lowerSearchTerm = searchTerm.toLowerCase();
-    return tracks.filter(track => 
-      (track.title || track.filename).toLowerCase().includes(lowerSearchTerm) ||
-      (track.artist || '').toLowerCase().includes(lowerSearchTerm) ||
-      (track.album || '').toLowerCase().includes(lowerSearchTerm) ||
-      (track.genre || '').toLowerCase().includes(lowerSearchTerm)
+    return tracks.filter(
+      (track) =>
+        (track.title || track.filename).toLowerCase().includes(lowerSearchTerm) ||
+        (track.artist || '').toLowerCase().includes(lowerSearchTerm) ||
+        (track.album || '').toLowerCase().includes(lowerSearchTerm) ||
+        (track.genre || '').toLowerCase().includes(lowerSearchTerm)
     );
   }, [tracks, searchTerm]);
 
@@ -59,7 +65,7 @@ const VirtualizedTrackList: React.FC<VirtualizedTrackListProps> = ({
   };
 
   const isTrackInQueue = (track: Track): boolean => {
-    return queue.some(qTrack => qTrack.filepath === track.filepath);
+    return queue.some((qTrack) => qTrack.filepath === track.filepath);
   };
 
   const rowRenderer = ({ index, key, style }: ListRowProps) => {
@@ -70,8 +76,7 @@ const VirtualizedTrackList: React.FC<VirtualizedTrackListProps> = ({
 
     const handleTrackClick = () => {
       onTrackSelect(track);
-      // Auto-analyze when track is clicked
-      onTrackAnalyze(track);
+      // NO auto-analyze - only manual analysis on request
       // Start playback with the filtered list as queue
       playTrack(track, filteredTracks);
     };
@@ -88,12 +93,12 @@ const VirtualizedTrackList: React.FC<VirtualizedTrackListProps> = ({
         <div
           className={`flex items-center justify-between p-3 mx-2 hover:bg-zinc-800/50 rounded-lg transition-all duration-200 cursor-pointer border border-transparent group ${
             isCurrentTrack
-              ? 'bg-purple-900/30 border-purple-500/30 shadow-lg shadow-purple-500/10' 
-              : isSelected 
+              ? 'bg-purple-900/30 border-purple-500/30 shadow-lg shadow-purple-500/10'
+              : isSelected
                 ? 'bg-zinc-800/30 border-zinc-600/30'
                 : inQueue
-                ? 'bg-blue-900/20 border-blue-500/20'
-                : 'hover:border-zinc-700/50'
+                  ? 'bg-blue-900/20 border-blue-500/20'
+                  : 'hover:border-zinc-700/50'
           } ${isAnalyzing && isSelected ? 'opacity-75' : ''}`}
           onClick={handleTrackClick}
         >
@@ -112,7 +117,8 @@ const VirtualizedTrackList: React.FC<VirtualizedTrackListProps> = ({
                       const target = e.target as HTMLImageElement;
                       const parent = target.parentElement;
                       if (parent) {
-                        parent.innerHTML = '<div class="w-full h-full flex items-center justify-center text-gray-400"><svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg></div>';
+                        parent.innerHTML =
+                          '<div class="w-full h-full flex items-center justify-center text-gray-400"><svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg></div>';
                       }
                     }}
                   />
@@ -122,12 +128,12 @@ const VirtualizedTrackList: React.FC<VirtualizedTrackListProps> = ({
                   <MusicalNoteIcon className="w-6 h-6" />
                 </div>
               )}
-              
+
               {/* Play overlay on hover */}
               <div className="absolute inset-0 bg-black/50 rounded flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                 <PlayIcon className="w-5 h-5 text-white" />
               </div>
-              
+
               {/* Now playing indicator */}
               {isCurrentTrack && isPlaying && (
                 <div className="absolute -top-1 -right-1 w-3 h-3 bg-purple-500 rounded-full animate-pulse" />
@@ -138,27 +144,27 @@ const VirtualizedTrackList: React.FC<VirtualizedTrackListProps> = ({
                 <div className="absolute -top-1 -right-1 w-3 h-3 bg-blue-500 rounded-full" />
               )}
             </div>
-            
+
             <div className="flex-1 min-w-0">
-              <h3 className={`font-medium truncate ${
-                isCurrentTrack ? 'text-purple-300' : inQueue ? 'text-blue-300' : 'text-white'
-              }`}>
+              <h3
+                className={`font-medium truncate ${
+                  isCurrentTrack ? 'text-purple-300' : inQueue ? 'text-blue-300' : 'text-white'
+                }`}
+              >
                 {track.title || track.filename}
               </h3>
               <p className="text-sm text-gray-400 truncate">
                 {track.artist || 'Unknown Artist'}
                 {track.album && ` • ${track.album}`}
               </p>
-              {track.genre && (
-                <p className="text-xs text-gray-500 truncate">{track.genre}</p>
-              )}
+              {track.genre && <p className="text-xs text-gray-500 truncate">{track.genre}</p>}
             </div>
           </div>
           <div className="flex items-center gap-3 flex-shrink-0">
             {isAnalyzing && isSelected && (
               <div className="text-xs text-purple-400 animate-pulse font-medium">Analyzing...</div>
             )}
-            
+
             {/* Queue Status */}
             {isCurrentTrack && (
               <div className="text-xs text-purple-400 font-medium">
@@ -180,7 +186,9 @@ const VirtualizedTrackList: React.FC<VirtualizedTrackListProps> = ({
               </button>
             )}
 
-            <span className="text-gray-400 text-sm tabular-nums">{formatDuration(track.duration)}</span>
+            <span className="text-gray-400 text-sm tabular-nums">
+              {formatDuration(track.duration)}
+            </span>
           </div>
         </div>
       </div>
@@ -225,10 +233,9 @@ const VirtualizedTrackList: React.FC<VirtualizedTrackListProps> = ({
       {/* Results Count */}
       <div className="flex justify-between items-center text-sm text-gray-400">
         <span>
-          {searchTerm 
-            ? `${filteredTracks.length} of ${tracks.length} tracks` 
-            : `${tracks.length} tracks`
-          }
+          {searchTerm
+            ? `${filteredTracks.length} of ${tracks.length} tracks`
+            : `${tracks.length} tracks`}
           {djMode && queue.length > 0 && (
             <span className="ml-2 px-2 py-0.5 bg-blue-600 rounded text-xs text-white">
               {queue.length} in queue
@@ -260,4 +267,4 @@ const VirtualizedTrackList: React.FC<VirtualizedTrackListProps> = ({
   );
 };
 
-export default VirtualizedTrackList; 
+export default VirtualizedTrackList;

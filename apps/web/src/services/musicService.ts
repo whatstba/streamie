@@ -42,12 +42,6 @@ interface TrackAnalysis {
   hot_cues?: SeratoHotCue[];
 }
 
-interface WaveformData {
-  waveform: number[];
-  sample_rate: number;
-  hop_length: number;
-}
-
 const API_BASE_URL = 'http://localhost:8000';
 
 export const musicService = {
@@ -79,7 +73,7 @@ export const musicService = {
     try {
       const [trackResponse, analysisResponse] = await Promise.all([
         fetch(`${API_BASE_URL}/track/${encodeURIComponent(filepath)}`),
-        fetch(`${API_BASE_URL}/track/${encodeURIComponent(filepath)}/analysis`)
+        fetch(`${API_BASE_URL}/track/${encodeURIComponent(filepath)}/analysis`),
       ]);
 
       if (!trackResponse.ok || !analysisResponse.ok) {
@@ -91,7 +85,7 @@ export const musicService = {
 
       return {
         ...track,
-        bpm: analysis.bpm
+        bpm: analysis.bpm,
       };
     } catch (error) {
       console.error('Error fetching track with BPM:', error);
@@ -112,17 +106,9 @@ export const musicService = {
       })
     );
 
-    return enrichedTracks.map((result, index) => 
+    return enrichedTracks.map((result, index) =>
       result.status === 'fulfilled' ? result.value : tracks[index]
     );
-  },
-
-  async getWaveform(filepath: string): Promise<WaveformData> {
-    const response = await fetch(`${API_BASE_URL}/track/${encodeURIComponent(filepath)}/waveform`);
-    if (!response.ok) {
-      throw new Error('Failed to fetch waveform');
-    }
-    return response.json();
   },
 
   getArtworkUrl(filepath: string): string {
@@ -131,5 +117,5 @@ export const musicService = {
 
   getStreamUrl(filepath: string): string {
     return `${API_BASE_URL}/track/${encodeURIComponent(filepath)}/stream`;
-  }
-}; 
+  },
+};

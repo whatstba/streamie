@@ -25,7 +25,7 @@ const QueueManager: React.FC = () => {
     playTrack,
     removeFromQueue,
     clearQueue,
-    moveTrackInQueue,
+    moveQueueItem,
   } = useAudioPlayer();
 
   const [isOpen, setIsOpen] = useState(false);
@@ -50,7 +50,7 @@ const QueueManager: React.FC = () => {
   const handleDrop = (e: React.DragEvent, dropIndex: number) => {
     e.preventDefault();
     if (draggedIndex !== null && draggedIndex !== dropIndex) {
-      moveTrackInQueue(draggedIndex, dropIndex);
+      moveQueueItem(draggedIndex, dropIndex);
     }
     setDraggedIndex(null);
   };
@@ -61,13 +61,13 @@ const QueueManager: React.FC = () => {
 
   const handleMoveUp = (index: number) => {
     if (index > 0) {
-      moveTrackInQueue(index, index - 1);
+      moveQueueItem(index, index - 1);
     }
   };
 
   const handleMoveDown = (index: number) => {
     if (index < queue.length - 1) {
-      moveTrackInQueue(index, index + 1);
+      moveQueueItem(index, index + 1);
     }
   };
 
@@ -134,7 +134,7 @@ const QueueManager: React.FC = () => {
               {queue.map((track, index) => {
                 const status = getTrackStatus(index);
                 const isDragging = draggedIndex === index;
-                
+
                 return (
                   <div
                     key={`${track.filepath}-${index}`}
@@ -148,8 +148,8 @@ const QueueManager: React.FC = () => {
                       status === 'current'
                         ? 'bg-purple-900/30 border-purple-500/30'
                         : status === 'next'
-                        ? 'bg-orange-900/30 border-orange-500/30'
-                        : ''
+                          ? 'bg-orange-900/30 border-orange-500/30'
+                          : ''
                     }`}
                   >
                     {/* Drag Handle */}
@@ -181,7 +181,8 @@ const QueueManager: React.FC = () => {
                             const target = e.target as HTMLImageElement;
                             const parent = target.parentElement;
                             if (parent) {
-                              parent.innerHTML = '<div class="w-full h-full flex items-center justify-center text-gray-400"><svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg></div>';
+                              parent.innerHTML =
+                                '<div class="w-full h-full flex items-center justify-center text-gray-400"><svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg></div>';
                             }
                           }}
                         />
@@ -194,9 +195,11 @@ const QueueManager: React.FC = () => {
 
                     {/* Track Info */}
                     <div className="flex-1 min-w-0">
-                      <h3 className={`font-medium truncate ${
-                        status === 'current' ? 'text-purple-300' : 'text-white'
-                      }`}>
+                      <h3
+                        className={`font-medium truncate ${
+                          status === 'current' ? 'text-purple-300' : 'text-white'
+                        }`}
+                      >
                         {track.title || track.filename}
                       </h3>
                       <p className="text-sm text-gray-400 truncate">
@@ -221,7 +224,7 @@ const QueueManager: React.FC = () => {
                       >
                         <ChevronUpIcon className="h-4 w-4" />
                       </button>
-                      
+
                       <button
                         onClick={() => handleMoveDown(index)}
                         disabled={index === queue.length - 1}
@@ -259,7 +262,9 @@ const QueueManager: React.FC = () => {
             <div className="p-4 border-t border-zinc-700">
               <div className="flex items-center justify-between text-sm text-gray-400">
                 <span>Drag tracks to reorder • Click play button to jump to track</span>
-                <span>Total: {formatDuration(queue.reduce((sum, track) => sum + track.duration, 0))}</span>
+                <span>
+                  Total: {formatDuration(queue.reduce((sum, track) => sum + track.duration, 0))}
+                </span>
               </div>
             </div>
           </div>
@@ -269,4 +274,4 @@ const QueueManager: React.FC = () => {
   );
 };
 
-export default QueueManager; 
+export default QueueManager;

@@ -5,7 +5,6 @@ This allows attaching a debugger from VS Code or other IDEs
 
 import debugpy
 import uvicorn
-import sys
 
 # Configure debugpy
 debugpy.listen(5678)  # Port for debugger to attach
@@ -23,5 +22,5 @@ if __name__ == "__main__":
         host="127.0.0.1",
         port=8000,
         reload=True,
-        log_level="info"
-    ) 
+        log_level="info",
+    )

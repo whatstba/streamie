@@ -2,13 +2,6 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { useAudioPlayer } from '@/context/AudioPlayerContext';
-import { musicService } from '@/services/musicService';
-
-interface WaveformData {
-  waveform: number[];
-  sample_rate: number;
-  hop_length: number;
-}
 
 const BpmWaveformDisplay: React.FC = () => {
   const {
@@ -20,34 +13,13 @@ const BpmWaveformDisplay: React.FC = () => {
     addHotCue,
     djMode,
     sourceBpm,
-    isPlaying
+    isPlaying,
   } = useAudioPlayer();
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [waveformData, setWaveformData] = useState<WaveformData | null>(null);
   const [canvasWidth, setCanvasWidth] = useState(800);
-  const [canvasHeight] = useState(150);
+  const [canvasHeight] = useState(100);
   const [isDragging, setIsDragging] = useState(false);
-
-  // Load waveform data when track changes
-  useEffect(() => {
-    const loadWaveform = async () => {
-      if (!currentTrack) {
-        setWaveformData(null);
-        return;
-      }
-
-      try {
-        const data = await musicService.getWaveform(currentTrack.filepath);
-        setWaveformData(data);
-      } catch (error) {
-        console.error('Failed to load waveform:', error);
-        setWaveformData(null);
-      }
-    };
-
-    loadWaveform();
-  }, [currentTrack]);
 
   // Canvas resize handler
   useEffect(() => {
@@ -65,10 +37,10 @@ const BpmWaveformDisplay: React.FC = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Draw waveform and indicators
+  // Draw simplified waveform visualization (no API calls)
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas || !waveformData || !duration) return;
+    if (!canvas || !duration) return;
 
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
@@ -81,23 +53,16 @@ const BpmWaveformDisplay: React.FC = () => {
     ctx.fillStyle = '#0f0f0f';
     ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
-    // Draw waveform
-    const waveform = waveformData.waveform;
-    const barWidth = canvasWidth / waveform.length;
-    const maxAmplitude = Math.max(...waveform);
-
-    ctx.fillStyle = '#3b82f6';
-    for (let i = 0; i < waveform.length; i++) {
-      const x = i * barWidth;
-      const amplitude = waveform[i] / maxAmplitude;
-      const barHeight = amplitude * (canvasHeight * 0.8);
-      const y = (canvasHeight - barHeight) / 2;
-      
-      ctx.fillRect(x, y, Math.max(1, barWidth - 1), barHeight);
-    }
+    // Draw simplified progress bar background
+    ctx.fillStyle = '#374151';
+    ctx.fillRect(0, canvasHeight * 0.4, canvasWidth, canvasHeight * 0.2);
 
     // Draw progress indicator
     const progressX = (currentTime / duration) * canvasWidth;
+    ctx.fillStyle = '#3b82f6';
+    ctx.fillRect(0, canvasHeight * 0.4, progressX, canvasHeight * 0.2);
+
+    // Draw playhead
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 2;
     ctx.beginPath();
@@ -109,15 +74,15 @@ const BpmWaveformDisplay: React.FC = () => {
     if (sourceBpm && sourceBpm > 0) {
       const beatDuration = 60 / sourceBpm; // seconds per beat
       const beatsToShow = Math.ceil(duration / beatDuration);
-      
+
       ctx.strokeStyle = '#fbbf24';
       ctx.lineWidth = 1;
       ctx.setLineDash([2, 4]);
-      
+
       for (let beat = 0; beat < beatsToShow; beat++) {
         const beatTime = beat * beatDuration;
         const beatX = (beatTime / duration) * canvasWidth;
-        
+
         if (beat % 4 === 0) {
           // Stronger line for downbeats
           ctx.lineWidth = 2;
@@ -126,7 +91,7 @@ const BpmWaveformDisplay: React.FC = () => {
           ctx.lineWidth = 1;
           ctx.strokeStyle = '#fbbf24';
         }
-        
+
         ctx.beginPath();
         ctx.moveTo(beatX, 0);
         ctx.lineTo(beatX, canvasHeight);
@@ -140,11 +105,11 @@ const BpmWaveformDisplay: React.FC = () => {
       const trackCues = hotCues[currentTrack.filepath] || [];
       trackCues.forEach((cue) => {
         const cueX = (cue.time / duration) * canvasWidth;
-        
+
         // Draw cue marker
         ctx.fillStyle = cue.color;
         ctx.fillRect(cueX - 2, 0, 4, canvasHeight);
-        
+
         // Draw cue label
         ctx.fillStyle = '#ffffff';
         ctx.font = '10px monospace';
@@ -163,8 +128,7 @@ const BpmWaveformDisplay: React.FC = () => {
       const timeText = `${minutes}:${seconds.toString().padStart(2, '0')}`;
       ctx.fillText(timeText, x - 15, canvasHeight - 5);
     });
-
-  }, [waveformData, currentTime, duration, canvasWidth, sourceBpm, hotCues, currentTrack]);
+  }, [currentTime, duration, canvasWidth, sourceBpm, hotCues, currentTrack]);
 
   const handleCanvasClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
     if (!duration || !canvasRef.current) return;
@@ -193,7 +157,7 @@ const BpmWaveformDisplay: React.FC = () => {
     const rect = canvas.getBoundingClientRect();
     const x = event.clientX - rect.left;
     const seekTime = Math.max(0, Math.min(duration, (x / canvasWidth) * duration));
-    
+
     seek(seekTime);
   };
 
@@ -203,19 +167,11 @@ const BpmWaveformDisplay: React.FC = () => {
 
   return (
     <div className="bg-zinc-900/50 rounded-xl p-4 border border-zinc-500/30">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-          📊 Waveform & BPM Analysis
-        </h3>
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-lg font-semibold text-white">Beat Grid</h3>
         <div className="flex items-center gap-4 text-sm">
-          {sourceBpm && (
-            <div className="text-blue-400 font-mono">
-              {sourceBpm.toFixed(1)} BPM
-            </div>
-          )}
-          <div className="text-gray-400">
-            Shift+Click to add hot cue
-          </div>
+          {sourceBpm && <div className="text-blue-400 font-mono">{sourceBpm.toFixed(1)} BPM</div>}
+          <div className="text-gray-500 text-xs">Shift+Click for cue</div>
         </div>
       </div>
 
@@ -231,40 +187,24 @@ const BpmWaveformDisplay: React.FC = () => {
           onMouseUp={() => setIsDragging(false)}
           onMouseLeave={() => setIsDragging(false)}
         />
-        
-        {!waveformData && (
-          <div className="absolute inset-0 flex items-center justify-center bg-zinc-800/50 rounded-lg">
-            <div className="text-gray-400 animate-pulse">
-              Loading waveform...
-            </div>
-          </div>
-        )}
       </div>
 
-      {/* BPM Analysis Info */}
+      {/* Compact BPM Info - only show when BPM is available */}
       {sourceBpm && (
-        <div className="mt-4 grid grid-cols-4 gap-4 text-sm">
-          <div className="bg-zinc-800/50 rounded-lg p-3">
-            <div className="text-gray-400 text-xs">Tempo</div>
-            <div className="text-white font-mono text-lg">{sourceBpm.toFixed(1)}</div>
-            <div className="text-gray-400 text-xs">BPM</div>
+        <div className="mt-3 flex items-center gap-4 text-xs text-gray-400">
+          <div>
+            <span className="text-gray-500">Beat Length:</span>{' '}
+            <span className="text-white font-mono">{(60 / sourceBpm).toFixed(2)}s</span>
           </div>
-          <div className="bg-zinc-800/50 rounded-lg p-3">
-            <div className="text-gray-400 text-xs">Beat Length</div>
-            <div className="text-white font-mono text-lg">{(60 / sourceBpm).toFixed(2)}</div>
-            <div className="text-gray-400 text-xs">Seconds</div>
+          <div>
+            <span className="text-gray-500">Total Beats:</span>{' '}
+            <span className="text-white font-mono">{Math.floor((duration * sourceBpm) / 60)}</span>
           </div>
-          <div className="bg-zinc-800/50 rounded-lg p-3">
-            <div className="text-gray-400 text-xs">Total Beats</div>
-            <div className="text-white font-mono text-lg">{Math.floor(duration * sourceBpm / 60)}</div>
-            <div className="text-gray-400 text-xs">In Track</div>
-          </div>
-          <div className="bg-zinc-800/50 rounded-lg p-3">
-            <div className="text-gray-400 text-xs">Hot Cues</div>
-            <div className="text-white font-mono text-lg">
+          <div>
+            <span className="text-gray-500">Hot Cues:</span>{' '}
+            <span className="text-white font-mono">
               {currentTrack ? (hotCues[currentTrack.filepath] || []).length : 0}
-            </div>
-            <div className="text-gray-400 text-xs">Set</div>
+            </span>
           </div>
         </div>
       )}
@@ -272,4 +212,4 @@ const BpmWaveformDisplay: React.FC = () => {
   );
 };
 
-export default BpmWaveformDisplay; 
+export default BpmWaveformDisplay;

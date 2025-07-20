@@ -1,10 +1,7 @@
 'use client';
 
 import React, { useState, useRef } from 'react';
-import {
-  SpeakerWaveIcon,
-  SpeakerXMarkIcon,
-} from '@heroicons/react/24/outline';
+import { SpeakerWaveIcon, SpeakerXMarkIcon } from '@heroicons/react/24/outline';
 import { useAudioPlayer } from '@/context/AudioPlayerContext';
 
 const VolumeControl: React.FC = () => {
@@ -18,7 +15,7 @@ const VolumeControl: React.FC = () => {
   const handleVolumeChange = (newVolume: number) => {
     const clampedVolume = Math.max(0, Math.min(1, newVolume));
     setVolume(clampedVolume);
-    
+
     // Auto-unmute when volume is changed
     if (isMuted && clampedVolume > 0) {
       toggleMute();
@@ -27,20 +24,20 @@ const VolumeControl: React.FC = () => {
 
   const handleMouseDown = (e: React.MouseEvent) => {
     if (!sliderRef.current) return;
-    
+
     const rect = sliderRef.current.getBoundingClientRect();
     const percent = (e.clientX - rect.left) / rect.width;
-    
+
     setIsDragging(true);
     handleVolumeChange(percent);
   };
 
   const handleMouseMove = (e: MouseEvent) => {
     if (!isDragging || !sliderRef.current) return;
-    
+
     const rect = sliderRef.current.getBoundingClientRect();
     const percent = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    
+
     handleVolumeChange(percent);
   };
 
@@ -53,7 +50,7 @@ const VolumeControl: React.FC = () => {
     if (isDragging) {
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
-      
+
       return () => {
         document.removeEventListener('mousemove', handleMouseMove);
         document.removeEventListener('mouseup', handleMouseUp);
@@ -97,7 +94,7 @@ const VolumeControl: React.FC = () => {
   };
 
   return (
-    <div 
+    <div
       className="flex items-center gap-2 group"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
@@ -136,10 +133,10 @@ const VolumeControl: React.FC = () => {
             className="absolute top-0 left-0 h-full bg-white rounded-full transition-all duration-100"
             style={{ width: `${displayVolume * 100}%` }}
           />
-          
+
           {/* Hover Effect */}
           <div className="absolute inset-0 bg-white/20 rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
-          
+
           {/* Volume Thumb */}
           <div
             className="absolute top-1/2 -translate-y-1/2 w-2 h-2 bg-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
@@ -158,4 +155,4 @@ const VolumeControl: React.FC = () => {
   );
 };
 
-export default VolumeControl; 
+export default VolumeControl;

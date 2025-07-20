@@ -41,7 +41,7 @@ const KeyboardShortcutsHelp: React.FC = () => {
                 <XMarkIcon className="h-5 w-5" />
               </button>
             </div>
-            
+
             <div className="space-y-3">
               {shortcuts.map((shortcut, index) => (
                 <div key={index} className="flex items-center justify-between">
@@ -52,7 +52,7 @@ const KeyboardShortcutsHelp: React.FC = () => {
                 </div>
               ))}
             </div>
-            
+
             <div className="mt-4 pt-4 border-t border-zinc-700">
               <p className="text-xs text-gray-500">
                 Shortcuts work when not typing in input fields
@@ -65,4 +65,4 @@ const KeyboardShortcutsHelp: React.FC = () => {
   );
 };
 
-export default KeyboardShortcutsHelp; 
+export default KeyboardShortcutsHelp;
