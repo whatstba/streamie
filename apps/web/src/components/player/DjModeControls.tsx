@@ -38,7 +38,7 @@ const DjModeControls: React.FC = () => {
         <div>
           <h3 className="text-lg font-semibold text-white">Next Track</h3>
           {currentTrack && sourceBpm && (
-            <p className="text-xs text-gray-400 mt-1">Current: {sourceBpm.toFixed(1)} BPM</p>
+            <p className="text-xs text-gray-400 mt-1">Current: {sourceBpm.toFixed(0)} BPM</p>
           )}
         </div>
         <div className="flex items-center gap-2">
@@ -122,9 +122,9 @@ const DjModeControls: React.FC = () => {
             <div className="text-right">
               <div className="text-sm font-mono text-purple-400">
                 {targetBpm
-                  ? `${targetBpm.toFixed(1)} BPM`
+                  ? `${targetBpm.toFixed(0)} BPM`
                   : nextTrack.bpm
-                    ? `${nextTrack.bpm} BPM`
+                    ? `${nextTrack.bpm.toFixed(0)} BPM`
                     : '--'}
               </div>
               {sourceBpm && targetBpm && (

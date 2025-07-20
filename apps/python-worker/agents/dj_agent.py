@@ -17,6 +17,7 @@ import sqlite3
 import os
 
 from utils.sqlite_db import get_sqlite_db
+from utils.dj_llm import DJLLMService, VibeAnalysis, TrackEvaluation
 
 # Configure logging for the DJ agent
 logger = logging.getLogger("DJAgent")
@@ -55,7 +56,7 @@ class DJAgentState(TypedDict):
 
 
 @tool
-def analyze_hot_cue_transitions(track_filepaths: List[str]) -> Dict:
+async def analyze_hot_cue_transitions(track_filepaths: List[str]) -> Dict:
     """Analyze hot cue compatibility for transitions between consecutive tracks."""
     try:
         import json
@@ -115,7 +116,7 @@ def analyze_hot_cue_transitions(track_filepaths: List[str]) -> Dict:
                 ):
                     try:
                         current_hot_cues = json.loads(current_track["hot_cues"])
-                    except:
+                    except (json.JSONDecodeError, TypeError):
                         pass
 
                 if next_track.get("hot_cues") and isinstance(
@@ -123,7 +124,7 @@ def analyze_hot_cue_transitions(track_filepaths: List[str]) -> Dict:
                 ):
                     try:
                         next_hot_cues = json.loads(next_track["hot_cues"])
-                    except:
+                    except (json.JSONDecodeError, TypeError):
                         pass
 
                 if current_hot_cues:
@@ -134,7 +135,7 @@ def analyze_hot_cue_transitions(track_filepaths: List[str]) -> Dict:
                     transition_analysis["tracks_with_hot_cues"] += 1
 
                 # Analyze transition compatibility
-                transition_info = analyze_transition_compatibility(
+                transition_info = await analyze_transition_compatibility(
                     current_track, next_track, current_hot_cues, next_hot_cues
                 )
 
@@ -202,13 +203,17 @@ def analyze_hot_cue_transitions(track_filepaths: List[str]) -> Dict:
         return {"error": str(e), "transitions": []}
 
 
-def analyze_transition_compatibility(
+async def analyze_transition_compatibility(
     current_track: Dict,
     next_track: Dict,
     current_hot_cues: List[Dict],
     next_hot_cues: List[Dict],
 ) -> Dict:
-    """Analyze compatibility between two tracks for transition planning."""
+    """Analyze compatibility between two tracks for transition planning using AI."""
+    from utils.dj_llm import DJLLMService
+
+    dj_service = DJLLMService()
+
     compatibility = {
         "score": 0.0,
         "bpm_compatible": False,
@@ -220,97 +225,113 @@ def analyze_transition_compatibility(
         "effect_plan": {"profile": "standard", "effects": [], "reasoning": ""},
     }
 
-    # BPM compatibility analysis
-    current_bpm = current_track.get("bpm")
-    next_bpm = next_track.get("bpm")
-    current_energy = current_track.get("energy_level", 0.5)
-    next_energy = next_track.get("energy_level", 0.5)
+    # Get AI-powered transition plan
+    try:
+        # Determine DJ style based on context
+        dj_style = "smooth"  # Default
+        current_genre = current_track.get("genre", "").lower()
+        next_genre = next_track.get("genre", "").lower()
 
-    if current_bpm and next_bpm:
-        bpm_diff = abs(current_bpm - next_bpm)
-        energy_diff = next_energy - current_energy
+        if any(
+            g in current_genre + next_genre for g in ["techno", "hard", "industrial"]
+        ):
+            dj_style = "aggressive"
+        elif any(
+            g in current_genre + next_genre for g in ["experimental", "ambient", "idm"]
+        ):
+            dj_style = "creative"
 
-        if bpm_diff <= 5:
-            compatibility["score"] += 0.3
-            compatibility["bpm_compatible"] = True
-            compatibility["notes"].append(
-                f"Excellent BPM match ({current_bpm:.1f} -> {next_bpm:.1f} BPM)"
-            )
+        # Get AI transition plan
+        transition_plan = await dj_service.plan_transition(
+            current_track, next_track, dj_style
+        )
 
-            # Minimal effects for close BPM
-            compatibility["effect_plan"] = {
-                "profile": "smooth_blend",
-                "effects": [
-                    {
-                        "type": "echo",
-                        "start_at": 0.6,  # 60% into transition
-                        "duration": 2.0,
-                        "intensity": 0.3,
-                    }
-                ],
-                "reasoning": "Close BPM match allows for subtle echo enhancement",
-            }
+        # Convert AI plan to compatibility format
+        compatibility["score"] = transition_plan.compatibility_score
+        compatibility["bpm_compatible"] = transition_plan.compatibility_score > 0.5
 
-        elif bpm_diff <= 15:
-            compatibility["score"] += 0.15
-            compatibility["bpm_compatible"] = True
-            compatibility["notes"].append(
-                f"Good BPM compatibility ({current_bpm:.1f} -> {next_bpm:.1f} BPM)"
-            )
-            compatibility["recommended_effects"].append("filter_sweep")
+        # Extract effects and timing
+        compatibility["effect_plan"] = {
+            "profile": transition_plan.transition_type,
+            "effects": [
+                {
+                    "type": effect.type,
+                    "start_at": effect.start_at,
+                    "duration": effect.duration,
+                    "intensity": effect.intensity
+                } if hasattr(effect, 'type') else effect
+                for effect in transition_plan.effects
+            ],
+            "reasoning": transition_plan.technique_notes,
+        }
 
-            # Moderate effects for medium BPM difference
-            filter_intensity = (
-                0.5 if energy_diff > 0 else 0.3
-            )  # High-pass for energy increase
-            compatibility["effect_plan"] = {
-                "profile": "tempo_blend",
-                "effects": [
-                    {
-                        "type": "filter",
-                        "start_at": 0.0,
-                        "duration": 3.0,
-                        "intensity": filter_intensity,
-                    },
-                    {
-                        "type": "echo",
-                        "start_at": 0.4,
-                        "duration": 2.5,
-                        "intensity": 0.4,
-                    },
-                ],
-                "reasoning": f"Medium BPM difference ({bpm_diff:.0f}) requires smooth filtering",
-            }
+        # Add professional notes
+        compatibility["notes"].append(transition_plan.technique_notes)
 
-        elif bpm_diff <= 30:
-            compatibility["score"] += 0.05
-            compatibility["recommended_effects"].append("filter_sweep")
-            compatibility["notes"].append(
-                f"Large BPM difference, recommend filter effects ({current_bpm:.1f} -> {next_bpm:.1f} BPM)"
-            )
+        # Extract recommended effects from AI plan
+        for effect in transition_plan.effects:
+            effect_type = effect.type if hasattr(effect, 'type') else effect.get("type")
+            if effect_type and effect_type not in compatibility["recommended_effects"]:
+                compatibility["recommended_effects"].append(effect_type)
 
-            # Heavy effects for large BPM difference
-            is_speeding_up = next_bpm > current_bpm
-            compatibility["effect_plan"] = {
-                "profile": "energy_shift",
-                "effects": [
-                    {
-                        "type": "filter",
-                        "start_at": 0.0,
-                        "duration": 4.0,
-                        "intensity": 0.8 if is_speeding_up else 0.3,
-                    },
-                    {
-                        "type": "echo",
-                        "start_at": 0.2,
-                        "duration": 3.0,
-                        "intensity": 0.6,
-                    },
-                ],
-                "reasoning": f"Large BPM {'increase' if is_speeding_up else 'decrease'} needs heavy filtering",
-            }
+        # Add risk assessment
+        if transition_plan.risk_level == "adventurous":
+            compatibility["notes"].append("⚠️ Advanced technique - practice recommended")
 
-    # Hot cue compatibility analysis
+    except Exception as e:
+        logger.error(f"AI transition planning failed: {e}")
+        # Fallback to basic BPM analysis
+        current_bpm = current_track.get("bpm")
+        next_bpm = next_track.get("bpm")
+
+        if current_bpm and next_bpm:
+            bpm_diff = abs(current_bpm - next_bpm)
+            if bpm_diff <= 5:
+                compatibility["score"] = 0.8
+                compatibility["bpm_compatible"] = True
+                compatibility["effect_plan"] = {
+                    "profile": "smooth_blend",
+                    "effects": [
+                        {
+                            "type": "filter",
+                            "start_at": 2.0,
+                            "duration": 4.0,
+                            "intensity": 0.25,
+                        }
+                    ],
+                    "reasoning": "Close BPM match allows smooth transition",
+                }
+            elif bpm_diff <= 15:
+                compatibility["score"] = 0.6
+                compatibility["bpm_compatible"] = True
+                compatibility["effect_plan"] = {
+                    "profile": "tempo_blend",
+                    "effects": [
+                        {
+                            "type": "filter",
+                            "start_at": 0.0,
+                            "duration": 5.0,
+                            "intensity": 0.35,
+                        },
+                    ],
+                    "reasoning": "Medium BPM difference requires filter transition",
+                }
+            else:
+                compatibility["score"] = 0.3
+                compatibility["effect_plan"] = {
+                    "profile": "energy_shift",
+                    "effects": [
+                        {
+                            "type": "filter",
+                            "start_at": 0.0,
+                            "duration": 6.0,
+                            "intensity": 0.45,
+                        }
+                    ],
+                    "reasoning": "Large BPM gap requires careful transition",
+                }
+
+    # Hot cue compatibility analysis (kept as is for now)
     if current_hot_cues and next_hot_cues:
         current_duration = current_track.get("duration", 300)  # Default 5 minutes
 
@@ -324,35 +345,23 @@ def analyze_transition_compatibility(
 
         if outro_cues and intro_cues:
             compatibility["hot_cue_compatible"] = True
-            compatibility["score"] += 0.4
+            compatibility["score"] = min(1.0, compatibility["score"] + 0.2)
 
-            # Find best cue pair
-            best_outro = None
-            best_intro = None
-            best_cue_score = 0
-
-            for outro_cue in outro_cues:
-                for intro_cue in intro_cues:
-                    cue_score = calculate_cue_pair_score(outro_cue, intro_cue)
-                    if cue_score > best_cue_score:
-                        best_cue_score = cue_score
-                        best_outro = outro_cue
-                        best_intro = intro_cue
-
-            if best_outro and best_intro:
-                compatibility["optimal_outro_cue"] = best_outro
-                compatibility["optimal_intro_cue"] = best_intro
-                compatibility["score"] += best_cue_score * 0.2
+            # Simply use the first available cues
+            if outro_cues and intro_cues:
+                compatibility["optimal_outro_cue"] = outro_cues[0]
+                compatibility["optimal_intro_cue"] = intro_cues[0]
                 compatibility["notes"].append(
-                    f"Optimal transition: {best_outro['name']} -> {best_intro['name']}"
+                    f"Hot cue transition: {outro_cues[0]['name']} -> {intro_cues[0]['name']}"
                 )
 
-                # Recommend scratch effect for phrase transitions
+                # AI might recommend scratch for phrase transitions
                 if (
-                    best_outro.get("type") == "phrase"
-                    and best_intro.get("type") == "phrase"
+                    outro_cues[0].get("type") == "phrase"
+                    and intro_cues[0].get("type") == "phrase"
                 ):
-                    compatibility["recommended_effects"].append("scratch")
+                    if "scratch" not in compatibility["recommended_effects"]:
+                        compatibility["recommended_effects"].append("scratch")
                     compatibility["notes"].append(
                         "Phrase-to-phrase transition - scratch effect recommended"
                     )
@@ -364,34 +373,9 @@ def analyze_transition_compatibility(
     return compatibility
 
 
-def calculate_cue_pair_score(outro_cue: Dict, intro_cue: Dict) -> float:
-    """Calculate compatibility score for a specific cue pair."""
-    score = 0.0
-
-    # Prefer phrase cues
-    if outro_cue.get("type") == "phrase":
-        score += 0.3
-    if intro_cue.get("type") == "phrase":
-        score += 0.3
-
-    # Analyze cue names for semantic matching
-    outro_name = outro_cue.get("name", "").lower()
-    intro_name = intro_cue.get("name", "").lower()
-
-    # Perfect matches
-    if "outro" in outro_name and "intro" in intro_name:
-        score += 0.4
-    elif "end" in outro_name and "start" in intro_name:
-        score += 0.3
-    elif "break" in outro_name and "drop" in intro_name:
-        score += 0.2
-
-    return min(1.0, score)
-
-
 @tool
-def search_tracks_by_vibe(vibe_keywords: str, limit: int = 20) -> List[Dict]:
-    """Search for tracks that match the given vibe keywords.
+async def search_tracks_by_vibe(vibe_keywords: str, limit: int = 20) -> List[Dict]:
+    """Search for tracks that match the given vibe keywords using AI analysis.
 
     Args:
         vibe_keywords: Keywords describing the desired vibe (e.g., "chill relaxing smooth")
@@ -400,100 +384,155 @@ def search_tracks_by_vibe(vibe_keywords: str, limit: int = 20) -> List[Dict]:
     Returns:
         List of tracks matching the vibe
     """
-    logger.info(f"🔍 Searching tracks with vibe: '{vibe_keywords}' (limit: {limit})")
+    logger.info(
+        f"🔍 AI-Powered track search for vibe: '{vibe_keywords}' (limit: {limit})"
+    )
+
+    # Initialize DJ LLM service
+    dj_service = DJLLMService()
+
+    # Get AI vibe analysis
+    try:
+        vibe_analysis = await dj_service.analyze_vibe(vibe_keywords)
+        logger.info(
+            f"   🤖 AI Vibe Analysis: Energy={vibe_analysis.energy_level:.2f}, "
+            f"Mood={vibe_analysis.mood_keywords}, BPM={vibe_analysis.bpm_range}"
+        )
+    except Exception as e:
+        logger.error(f"   ❌ AI analysis failed, using fallback: {e}")
+        # Fallback to basic analysis
+        vibe_analysis = VibeAnalysis(
+            energy_level=0.5,
+            energy_progression="steady",
+            mood_keywords=vibe_keywords.lower().split(),
+            genre_preferences=[],  # Empty list means no genre filtering
+            bpm_range={"min": 100, "max": 140},
+            mixing_style="smooth",
+        )
 
     db = get_sqlite_db()
     cursor = db.adapter.connection.cursor()
 
-    # Parse vibe keywords for energy level and genre hints
-    keywords_lower = vibe_keywords.lower()
+    # Build intelligent query based on AI analysis
+    query_conditions = []
+    order_by = []
 
-    # Energy level estimation from keywords
-    high_energy_words = [
-        "energetic",
-        "upbeat",
-        "pump",
-        "hype",
-        "intense",
-        "party",
-        "dance",
-        "workout",
-        "gym",
-        "fast",
-    ]
-    low_energy_words = [
-        "chill",
-        "relaxing",
-        "calm",
-        "mellow",
-        "soft",
-        "quiet",
-        "ambient",
-        "downtempo",
-        "slow",
-    ]
+    # TODO: Add energy level filtering once values are populated using librosa/essentia
+    # For now, we'll query by BPM only
 
-    high_count = sum(1 for word in high_energy_words if word in keywords_lower)
-    low_count = sum(1 for word in low_energy_words if word in keywords_lower)
-
-    # Build query based on energy preference
-    if high_count > low_count:
-        logger.info(f"   🔥 Detected high energy vibe (score: {high_count})")
-        cursor.execute(
-            """
-            SELECT * FROM tracks 
-            WHERE bpm > 120 OR energy_level > 0.6
-            ORDER BY energy_level DESC, bpm DESC
-            LIMIT ?
-        """,
-            (limit,),
+    # BPM-based filtering
+    if vibe_analysis.bpm_range:
+        query_conditions.append(
+            f"(bpm BETWEEN {vibe_analysis.bpm_range['min']} AND {vibe_analysis.bpm_range['max']} OR bpm IS NULL)"
         )
-    elif low_count > high_count:
-        logger.info(f"   😌 Detected low energy vibe (score: {low_count})")
-        cursor.execute(
-            """
-            SELECT * FROM tracks 
-            WHERE bpm < 110 OR energy_level < 0.4
-            ORDER BY energy_level ASC, bpm ASC
-            LIMIT ?
-        """,
-            (limit,),
+
+    # Genre filtering if specified and not empty
+    if vibe_analysis.genre_preferences and len(vibe_analysis.genre_preferences) > 0:
+        genre_conditions = " OR ".join(
+            [f"genre LIKE '%{g}%'" for g in vibe_analysis.genre_preferences[:3]]
         )
+        query_conditions.append(f"({genre_conditions} OR genre IS NULL)")
+
+    # Combine conditions
+    where_clause = " AND ".join(query_conditions) if query_conditions else "1=1"
+    logger.debug(f"   📊 Query conditions: {query_conditions}")
+    logger.debug(f"   📊 Where clause: {where_clause}")
+
+    # Smart ordering based on vibe
+    # TODO: Use energy_level once values are populated
+    # For now, use BPM as a proxy for energy
+    if vibe_analysis.energy_progression == "building":
+        order_by.append("bpm ASC")  # Lower BPM first, building up
+    elif vibe_analysis.energy_progression == "cooling":
+        order_by.append("bpm DESC")  # Higher BPM first, cooling down
     else:
-        logger.info("   🎵 No clear energy preference, selecting randomly")
-        cursor.execute(
-            """
-            SELECT * FROM tracks 
-            ORDER BY RANDOM()
-            LIMIT ?
-        """,
-            (limit,),
-        )
+        # Order by closeness to target BPM (middle of range)
+        if vibe_analysis.bpm_range:
+            target_bpm = (
+                vibe_analysis.bpm_range["min"] + vibe_analysis.bpm_range["max"]
+            ) / 2
+            order_by.append(f"ABS(COALESCE(bpm, 120) - {target_bpm})")
+        else:
+            order_by.append("RANDOM()")
+
+    order_clause = ", ".join(order_by) if order_by else "RANDOM()"
+
+    # Execute intelligent query
+    query = f"""
+        SELECT * FROM tracks 
+        WHERE {where_clause}
+        ORDER BY {order_clause}
+        LIMIT ?
+    """
+
+    logger.debug(f"   📊 Executing AI-driven query: {query}")
+    logger.debug(f"   📊 Query limit: {limit * 2}")
+    cursor.execute(query, (limit * 2,))  # Get extra for AI filtering
 
     columns = [description[0] for description in cursor.description]
-    tracks = []
+    all_tracks = []
+    rows = cursor.fetchall()
+    logger.debug(f"   📊 Raw query returned {len(rows)} rows")
 
-    for row in cursor.fetchall():
+    for row in rows:
         track = dict(zip(columns, row))
         # Parse beat_times if it's a JSON string
         if track.get("beat_times") and isinstance(track["beat_times"], str):
             try:
                 track["beat_times"] = json.loads(track["beat_times"])
-            except:
+            except (json.JSONDecodeError, TypeError):
                 track["beat_times"] = []
-        tracks.append(track)
+
+        # Always estimate energy since database values might be NULL
+        # TODO: Store calculated energy values back to database
+        track["energy_level"] = dj_service.estimate_energy_from_features(
+            track.get("bpm"), track.get("genre")
+        )
+
+        all_tracks.append(track)
 
     cursor.close()
 
-    logger.info(f"   📊 Found {len(tracks)} matching tracks")
-    if tracks:
-        # Log a few examples
-        for i, track in enumerate(tracks[:3]):
-            logger.debug(
-                f"      {i + 1}. {track.get('title', 'Unknown')} - {track.get('artist', 'Unknown')} ({track.get('bpm', 0):.0f} BPM)"
+    # Let AI evaluate and rank tracks
+    evaluated_tracks = []
+    for track in all_tracks[: limit * 2]:  # Evaluate up to 2x limit
+        try:
+            evaluation = await dj_service.evaluate_track(track, vibe_analysis)
+            if evaluation.score > 0.3:  # Only include decent matches
+                evaluated_tracks.append({"track": track, "evaluation": evaluation})
+        except Exception:
+            # Fallback: include with default score
+            evaluated_tracks.append(
+                {
+                    "track": track,
+                    "evaluation": TrackEvaluation(
+                        score=0.5,
+                        reasoning="Evaluation skipped",
+                        energy_match=0.5,
+                        suggested_position=None,
+                        mixing_notes="Standard mix",
+                    ),
+                }
             )
 
-    return tracks
+    # Sort by AI score and take top tracks
+    evaluated_tracks.sort(key=lambda x: x["evaluation"].score, reverse=True)
+    final_tracks = [item["track"] for item in evaluated_tracks[:limit]]
+
+    logger.info(
+        f"   📊 AI selected {len(final_tracks)} tracks from {len(all_tracks)} candidates"
+    )
+    if final_tracks:
+        # Log top selections with AI reasoning
+        for i, item in enumerate(evaluated_tracks[:3]):
+            track = item["track"]
+            eval = item["evaluation"]
+            logger.info(
+                f"      {i + 1}. {track.get('title', 'Unknown')} - {track.get('artist', 'Unknown')} "
+                f"({track.get('bpm', 0):.0f} BPM) [Score: {eval.score:.2f}] - {eval.reasoning}"
+            )
+
+    return final_tracks
 
 
 @tool
@@ -523,17 +562,17 @@ def get_track_details(track_filepath: str) -> Dict:
     if track.get("beat_times") and isinstance(track["beat_times"], str):
         try:
             track["beat_times"] = json.loads(track["beat_times"])
-        except:
+        except (json.JSONDecodeError, TypeError):
             track["beat_times"] = []
 
     return track
 
 
 @tool
-def filter_tracks_by_energy(
+async def filter_tracks_by_energy(
     tracks: List[Dict], target_energy: float, tolerance: float = 0.2
 ) -> List[Dict]:
-    """Filter tracks by energy level.
+    """Filter tracks by energy level using AI understanding of energy dynamics.
 
     Args:
         tracks: List of tracks to filter
@@ -543,51 +582,69 @@ def filter_tracks_by_energy(
     Returns:
         Filtered list of tracks
     """
+    logger.info(f"🎚️ AI filtering {len(tracks)} tracks for energy {target_energy:.2f}")
+
+    dj_service = DJLLMService()
     filtered = []
+
+    # Create a simple vibe analysis for the target energy
+    target_vibe = VibeAnalysis(
+        energy_level=target_energy,
+        energy_progression="steady",
+        mood_keywords=["energetic" if target_energy > 0.6 else "chill"],
+        genre_preferences=[],
+        bpm_range={"min": 60, "max": 200},
+        mixing_style="smooth",
+    )
+
     for track in tracks:
-        energy = track.get("energy_level", 0.5)
-        if abs(energy - target_energy) <= tolerance:
-            filtered.append(track)
+        # Always estimate energy since database values might be NULL
+        # TODO: Store calculated energy values back to database
+        track["energy_level"] = dj_service.estimate_energy_from_features(
+            track.get("bpm"), track.get("genre")
+        )
+
+        # Use AI to evaluate if this track matches the target energy
+        try:
+            evaluation = await dj_service.evaluate_track(track, target_vibe)
+            if evaluation.energy_match > (1 - tolerance):
+                filtered.append(track)
+                logger.debug(
+                    f"   ✅ {track.get('title')} - Energy match: {evaluation.energy_match:.2f}"
+                )
+        except Exception:
+            # Fallback to simple comparison
+            energy = track.get("energy_level", 0.5)
+            if abs(energy - target_energy) <= tolerance:
+                filtered.append(track)
+
+    logger.info(f"   📊 Filtered to {len(filtered)} tracks matching energy criteria")
     return filtered
 
 
 @tool
-def sort_tracks_by_bpm_progression(
-    tracks: List[Dict], start_bpm: float, direction: str = "increase"
-) -> List[Dict]:
-    """Sort tracks to create a smooth BPM progression.
-
-    Args:
-        tracks: List of tracks to sort
-        start_bpm: Starting BPM
-        direction: "increase", "decrease", or "maintain"
-
-    Returns:
-        Sorted list of tracks
-    """
-    if direction == "increase":
-        return sorted(tracks, key=lambda x: abs((x.get("bpm") or 0) - start_bpm))
-    elif direction == "decrease":
-        return sorted(tracks, key=lambda x: -abs((x.get("bpm") or 0) - start_bpm))
-    else:
-        # Maintain - sort by closest BPM
-        return sorted(tracks, key=lambda x: abs((x.get("bpm") or 0) - start_bpm))
-
-
-@tool
-def finalize_playlist(
-    track_filepaths: List[str], mixing_notes: Optional[List[str]] = None
+async def finalize_playlist(
+    track_filepaths: List[str],
+    mixing_notes: Optional[List[str]] = None,
+    vibe_description: Optional[str] = None,
 ) -> Dict:
-    """Finalize the playlist with selected tracks and mixing notes.
+    """Finalize the playlist with AI-powered professional curation and flow analysis.
 
     Args:
         track_filepaths: List of track filepaths for the final playlist
         mixing_notes: Optional list of mixing notes for each track
+        vibe_description: Optional description of the desired vibe
 
     Returns:
-        Dictionary with success status and playlist details
+        Dictionary with success status and AI-enhanced playlist details
     """
-    logger.info(f"🎯 Finalizing playlist with {len(track_filepaths)} tracks")
+    from utils.dj_llm import DJLLMService
+    import sqlite3
+    import os
+
+    logger.info(
+        f"🎯 Finalizing playlist with {len(track_filepaths)} tracks using AI curation"
+    )
 
     if not track_filepaths:
         return {"success": False, "error": "No tracks provided"}
@@ -605,50 +662,183 @@ def finalize_playlist(
             duplicate_indices.append(i)
             logger.warning(f"⚠️ Duplicate track found at position {i + 1}: {filepath}")
 
-    # Adjust mixing notes if we removed duplicates
-    if mixing_notes and duplicate_indices:
-        unique_mixing_notes = []
-        for i, note in enumerate(mixing_notes):
-            if i not in duplicate_indices:
-                unique_mixing_notes.append(note)
-        mixing_notes = unique_mixing_notes
+    # Get track metadata from database
+    db_path = os.path.join(os.path.dirname(__file__), "..", "tracks.db")
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
 
-    # Ensure mixing_notes matches track count
-    if mixing_notes and len(mixing_notes) != len(unique_filepaths):
-        mixing_notes = None
-        logger.warning(
-            "Mixing notes count doesn't match tracks after removing duplicates, ignoring notes"
+    track_data = []
+    for filepath in unique_filepaths:
+        cursor.execute(
+            """
+            SELECT filepath, title, artist, bpm, key, energy_level, duration, genre
+            FROM tracks WHERE filepath = ?
+        """,
+            (filepath,),
+        )
+        result = cursor.fetchone()
+
+        if result:
+            columns = [description[0] for description in cursor.description]
+            track_dict = dict(zip(columns, result))
+            track_data.append(track_dict)
+        else:
+            # Basic fallback for missing data
+            track_data.append(
+                {
+                    "filepath": filepath,
+                    "title": os.path.basename(filepath),
+                    "artist": "Unknown",
+                    "bpm": None,
+                    "energy_level": 0.5,
+                }
+            )
+
+    conn.close()
+
+    # Use AI to finalize playlist
+    dj_service = DJLLMService()
+
+    try:
+        # Get transition analysis if available
+        transitions = []
+        if hasattr(finalize_playlist, "_last_transitions"):
+            transitions = finalize_playlist._last_transitions
+
+        # Get AI-powered playlist finalization
+        ai_result = await dj_service.finalize_playlist(
+            track_list=track_data,
+            vibe=vibe_description or "Professional DJ set",
+            transitions=transitions,
         )
 
-    playlist = []
-    for i, filepath in enumerate(unique_filepaths):
-        track_entry = {
-            "filepath": filepath,
-            "order": i + 1,
-            "mixing_note": mixing_notes[i] if mixing_notes else f"Track {i + 1}",
-        }
-        playlist.append(track_entry)
-        logger.debug(f"   {i + 1}. {filepath}")
+        # Convert AI result to expected format while preserving original filepaths
+        playlist = []
 
-    if len(unique_filepaths) < len(track_filepaths):
+        # Create a mapping of track identifiers to original track data
+        track_map = {}
+        for track in track_data:
+            # Use title and artist as a composite key
+            key = f"{track.get('title', 'Unknown')}_{track.get('artist', 'Unknown')}"
+            track_map[key] = track
+
+        # Process AI results and map back to original tracks
+        for i, ai_track in enumerate(ai_result.tracks):
+            # Try to find the original track
+            original_track = None
+
+            # First try direct position mapping if within bounds
+            if i < len(track_data):
+                original_track = track_data[i]
+                logger.debug(
+                    f"   Position mapping: Track {i + 1} -> {original_track.get('filepath')}"
+                )
+
+            # If AI provided track info, try to match by title/artist
+            if not original_track and isinstance(ai_track, dict):
+                ai_key = f"{ai_track.get('title', 'Unknown')}_{ai_track.get('artist', 'Unknown')}"
+                if ai_key in track_map:
+                    original_track = track_map[ai_key]
+                    logger.debug(
+                        f"   Title/artist mapping: {ai_key} -> {original_track.get('filepath')}"
+                    )
+
+            # Extract filepath from original track
+            if original_track:
+                filepath = original_track.get("filepath")
+            else:
+                # Fallback: use filepath from AI if provided (shouldn't happen)
+                filepath = (
+                    ai_track.get("filepath") if isinstance(ai_track, dict) else None
+                )
+                logger.warning(f"   ⚠️ Could not map AI track {i + 1} to original data")
+
+            # Build playlist entry with original filepath and AI enhancements
+            if filepath:
+                playlist_entry = {
+                    "filepath": filepath,
+                    "order": i + 1,  # Use position-based order
+                    "mixing_note": ai_track.get("mixing_note", f"Track {i + 1}")
+                    if isinstance(ai_track, dict)
+                    else f"Track {i + 1}",
+                    "energy": ai_track.get(
+                        "energy", original_track.get("energy_level", 0.5)
+                    )
+                    if isinstance(ai_track, dict)
+                    else 0.5,
+                }
+                playlist.append(playlist_entry)
+            else:
+                logger.error(f"   ❌ Skipping track {i + 1} - no filepath found")
+
+        # Validate we have tracks with filepaths
+        tracks_with_filepaths = [t for t in playlist if t.get("filepath")]
         logger.info(
-            f"✅ Playlist finalized with {len(playlist)} unique tracks (removed {len(track_filepaths) - len(unique_filepaths)} duplicates)"
+            f"   📊 Playlist validation: {len(tracks_with_filepaths)}/{len(playlist)} tracks have filepaths"
         )
-    else:
-        logger.info("✅ Playlist finalized successfully")
 
-    return {
-        "success": True,
-        "playlist": playlist,
-        "track_count": len(playlist),
-        "duplicates_removed": len(track_filepaths) - len(unique_filepaths),
-    }
+        # If we have no valid tracks, fall back to original track list
+        if not tracks_with_filepaths:
+            logger.warning(
+                "   ⚠️ No tracks with filepaths after AI processing, using original track order"
+            )
+            playlist = []
+            for i, track in enumerate(track_data):
+                if track.get("filepath"):
+                    playlist.append(
+                        {
+                            "filepath": track["filepath"],
+                            "order": i + 1,
+                            "mixing_note": f"Track {i + 1} - {track.get('title', 'Unknown')}",
+                            "energy": track.get("energy_level", 0.5),
+                        }
+                    )
+            tracks_with_filepaths = playlist
+
+        # Add AI insights to result
+        result = {
+            "success": True,
+            "playlist": tracks_with_filepaths,  # Use validated playlist
+            "track_count": len(tracks_with_filepaths),
+            "duplicates_removed": len(track_filepaths) - len(unique_filepaths),
+            "ai_insights": {
+                "overall_flow": ai_result.overall_flow,
+                "key_moments": ai_result.key_moments,
+                "mixing_style": ai_result.mixing_style,
+                "set_duration": ai_result.set_duration,
+                "energy_graph": ai_result.energy_graph,
+            },
+        }
+
+        logger.info(f"✅ AI-enhanced playlist finalized: {ai_result.overall_flow}")
+        return result
+
+    except Exception as e:
+        logger.error(f"❌ AI finalization failed, using basic approach: {e}")
+        # Fallback to basic finalization
+        playlist = []
+        for i, filepath in enumerate(unique_filepaths):
+            track_entry = {
+                "filepath": filepath,
+                "order": i + 1,
+                "mixing_note": mixing_notes[i]
+                if mixing_notes and i < len(mixing_notes)
+                else f"Track {i + 1}",
+            }
+            playlist.append(track_entry)
+
+        return {
+            "success": True,
+            "playlist": playlist,
+            "track_count": len(playlist),
+            "duplicates_removed": len(track_filepaths) - len(unique_filepaths),
+        }
 
 
 class DJAgent:
     """LangGraph agent for DJ playlist and vibe management."""
 
-    def __init__(self, llm_model: str = "gpt-4.1"):
+    def __init__(self, llm_model: str = "gpt-4.1-mini"):
         logger.info(f"🚀 Initializing DJAgent with model: {llm_model}")
         self.db = get_sqlite_db()
         self.llm = ChatOpenAI(model=llm_model, temperature=1)
@@ -658,7 +848,6 @@ class DJAgent:
             search_tracks_by_vibe,
             get_track_details,
             filter_tracks_by_energy,
-            sort_tracks_by_bpm_progression,
             finalize_playlist,
         ]
         self.llm_with_tools = self.llm.bind_tools(self.tools)
@@ -747,27 +936,71 @@ class DJAgent:
         # Extract finalized playlist from tool responses
         finalized_playlist = None
 
-        # Look through messages for tool call results
-        for msg in reversed(messages):  # Start from most recent
-            if hasattr(msg, "content") and isinstance(msg.content, str):
-                try:
-                    # Check if this is a tool response containing our playlist
-                    if (
-                        '"success": true' in msg.content
-                        and '"playlist":' in msg.content
-                    ):
-                        import json
+        # Debug: Log all messages to understand what's happening
+        logger.debug(f"🔍 Total messages in state: {len(messages)}")
 
-                        # Try to parse the tool response
-                        tool_result = json.loads(msg.content)
-                        if tool_result.get("success") and tool_result.get("playlist"):
-                            finalized_playlist = tool_result["playlist"]
-                            logger.info(
-                                f"📋 Extracted finalized playlist with {len(finalized_playlist)} tracks from tool response"
-                            )
-                            break
-                except:
-                    continue
+        # Look through messages for tool call results
+        for i, msg in enumerate(messages):
+            # Check for tool calls
+            if hasattr(msg, "tool_calls") and msg.tool_calls:
+                tool_names = []
+                for tc in msg.tool_calls:
+                    if isinstance(tc, dict):
+                        tool_names.append(tc.get("name", "unknown"))
+                    else:
+                        tool_names.append(getattr(tc, "name", "unknown"))
+                logger.debug(f"   Message {i}: Tool calls - {tool_names}")
+
+            # Check for tool responses - handle both string content and structured content
+            if hasattr(msg, "content"):
+                content = msg.content
+
+                # If content is already a dict (structured tool response)
+                if isinstance(content, dict):
+                    if content.get("success") and content.get("playlist"):
+                        finalized_playlist = content["playlist"]
+                        logger.info(
+                            f"📋 Extracted finalized playlist with {len(finalized_playlist)} tracks from structured response"
+                        )
+                        break
+
+                # If content is a string, try to parse it
+                elif isinstance(content, str):
+                    if '"success"' in content and '"playlist"' in content:
+                        logger.debug(
+                            f"   Message {i}: Found potential playlist response"
+                        )
+                        try:
+                            import json
+
+                            # Try to parse the tool response
+                            tool_result = json.loads(content)
+                            if tool_result.get("success") and tool_result.get(
+                                "playlist"
+                            ):
+                                finalized_playlist = tool_result["playlist"]
+                                logger.info(
+                                    f"📋 Extracted finalized playlist with {len(finalized_playlist)} tracks from JSON response"
+                                )
+                                break
+                        except Exception as e:
+                            logger.debug(f"   Failed to parse message {i}: {e}")
+                            continue
+
+            # Also check for ToolMessage type specifically
+            if hasattr(msg, "__class__") and "ToolMessage" in str(msg.__class__):
+                logger.debug(f"   Message {i}: ToolMessage detected")
+                if hasattr(msg, "content"):
+                    logger.debug(f"   ToolMessage content type: {type(msg.content)}")
+                    logger.debug(
+                        f"   ToolMessage content preview: {str(msg.content)[:200]}"
+                    )
+
+        if not finalized_playlist:
+            logger.warning("⚠️ No finalized playlist found in messages")
+            # Log the last few messages for debugging
+            for i, msg in enumerate(messages[-3:]):
+                logger.debug(f"   Recent message {i}: {str(msg)[:200]}")
 
         return {
             "final_response": final_response,
@@ -812,33 +1045,37 @@ class DJAgent:
         logger.debug(f"   - Genre: {current_track.get('genre', 'Unknown')}")
         logger.debug(f"   - Duration: {current_track.get('duration', 0):.1f}s")
 
-        # Calculate energy level based on BPM and mood
-        energy_level = self._calculate_energy_level(current_track)
-        logger.info(f"⚡ Calculated energy level: {energy_level:.2f}")
+        # Get energy level from database or estimate if missing
+        from utils.dj_llm import DJLLMService
 
-        # Determine dominant vibe
-        dominant_vibe = self._get_dominant_vibe(current_track.get("mood", {}))
-        logger.info(f"🎵 Dominant vibe: {dominant_vibe}")
+        dj_service = DJLLMService()
+
+        energy_level = current_track.get("energy_level")
+        if energy_level is None:
+            energy_level = dj_service.estimate_energy_from_features(
+                current_track.get("bpm"), current_track.get("genre")
+            )
+            logger.info(f"⚡ Energy level (estimated): {energy_level:.2f}")
+        else:
+            logger.info(f"⚡ Energy level: {energy_level:.2f}")
 
         vibe_analysis = {
             "track_id": current_track["filepath"],
             "bpm": current_track.get("bpm", 0),
             "energy_level": energy_level,
-            "dominant_vibe": dominant_vibe,
+            "dominant_vibe": "neutral",  # Simplified - let AI determine vibe
             "mood_vector": current_track.get("mood", {}),
             "genre": current_track.get("genre", "unknown"),
             "timestamp": datetime.now().isoformat(),
         }
 
-        logger.info(
-            f"✅ Track analysis complete: {energy_level:.2f} energy, {dominant_vibe} vibe"
-        )
+        logger.info(f"✅ Track analysis complete: {energy_level:.2f} energy")
 
         return {
             "vibe_analysis": vibe_analysis,
             "messages": [
                 AIMessage(
-                    content=f"Analyzed track: {current_track.get('title', 'Unknown')} - {energy_level:.2f} energy, {dominant_vibe} vibe"
+                    content=f"Analyzed track: {current_track.get('title', 'Unknown')} - {energy_level:.2f} energy"
                 )
             ],
         }
@@ -868,160 +1105,125 @@ class DJAgent:
             bpm_trend = "stable"
             logger.info("📊 No track history - starting fresh")
 
-        # Enhance context
+        # Enhance context - let AI decide energy direction in the agentic workflow
         enhanced_context = {
             **context,
             "current_energy": vibe_analysis["energy_level"],
             "avg_recent_bpm": avg_recent_bpm,
             "bpm_trend": bpm_trend,
-            "suggested_energy_direction": self._suggest_energy_direction(
-                vibe_analysis["energy_level"],
-                context.get("time_of_day", "evening"),
-                state.get("energy_pattern", "wave"),
-            ),
+            "energy_pattern": state.get("energy_pattern", "wave"),
         }
 
-        logger.info(
-            f"🎯 Energy direction: {enhanced_context['suggested_energy_direction']}"
-        )
+        logger.info(f"🎯 Energy pattern: {enhanced_context['energy_pattern']}")
         logger.debug(f"   - Current energy: {enhanced_context['current_energy']:.2f}")
         logger.debug(f"   - Pattern: {state.get('energy_pattern', 'wave')}")
 
         return {
             "context": enhanced_context,
-            "messages": [
-                AIMessage(
-                    content=f"Context built: {bpm_trend} BPM trend, suggesting {enhanced_context['suggested_energy_direction']} energy"
-                )
-            ],
+            "messages": [AIMessage(content=f"Context built: {bpm_trend} BPM trend")],
         }
 
     def match_vibes_node(self, state: DJAgentState) -> Dict:
-        """Find tracks with similar vibes from the database."""
+        """Find tracks with similar vibes - simplified for AI workflow."""
         vibe_analysis = state["vibe_analysis"]
-        context = state["context"]
 
-        logger.info("🎯 Starting vibe matching...")
+        logger.info("🎯 Finding similar tracks...")
         logger.debug(f"   - Reference BPM: {vibe_analysis['bpm']}")
         logger.debug(f"   - Reference energy: {vibe_analysis['energy_level']:.2f}")
         logger.debug(f"   - Reference genre: {vibe_analysis['genre']}")
 
-        # Query database for candidate tracks using SQLite
+        # For the original workflow, just get some tracks from DB
+        # The agentic workflow will use search_tracks_by_vibe instead
         cursor = self.db.adapter.connection.cursor()
-        cursor.execute(
-            "SELECT * FROM tracks WHERE filepath != ?", (vibe_analysis["track_id"],)
-        )
-        columns = [description[0] for description in cursor.description]
 
-        # Calculate similarity scores
+        # Simple query - get tracks with similar BPM range
+        bpm = vibe_analysis["bpm"] or 120
+        cursor.execute(
+            """
+            SELECT * FROM tracks 
+            WHERE filepath != ? 
+            AND bpm BETWEEN ? AND ?
+            LIMIT 50
+        """,
+            (vibe_analysis["track_id"], bpm - 10, bpm + 10),
+        )
+
+        columns = [description[0] for description in cursor.description]
         candidates = []
-        total_tracks = 0
 
         for row in cursor.fetchall():
-            total_tracks += 1
             track = dict(zip(columns, row))
 
-            # Parse beat_times if it's a JSON string
+            # Parse beat_times if needed
             if track.get("beat_times") and isinstance(track["beat_times"], str):
-                import json
-
                 try:
                     track["beat_times"] = json.loads(track["beat_times"])
-                except:
+                except (json.JSONDecodeError, TypeError):
                     track["beat_times"] = []
 
-            similarity = self._calculate_similarity(vibe_analysis, track, context)
+            # Simple scoring based on BPM proximity
+            bpm_diff = abs((track.get("bpm") or 120) - bpm)
+            score = max(0, 1 - (bpm_diff / 50))  # Simple linear score
 
-            if similarity > 0.5:  # Threshold for candidates
-                candidates.append({**track, "similarity_score": similarity})
-
-                if len(candidates) <= 5:  # Log first few matches
-                    logger.debug(
-                        f"   ✓ Match found: {track.get('title', 'Unknown')} - Score: {similarity:.3f}"
-                    )
+            candidates.append({**track, "similarity_score": score})
 
         cursor.close()
 
-        logger.info(
-            f"📊 Analyzed {total_tracks} tracks, found {len(candidates)} matches (threshold > 0.5)"
-        )
-
-        # Sort by similarity
+        # Sort by score
         candidates.sort(key=lambda x: x["similarity_score"], reverse=True)
-
-        # Take top candidates
         top_candidates = candidates[:20]
 
-        if top_candidates:
-            logger.info(
-                f"🏆 Top match: {top_candidates[0].get('title', 'Unknown')} (score: {top_candidates[0]['similarity_score']:.3f})"
-            )
-            logger.debug("   Top 5 candidates:")
-            for i, cand in enumerate(top_candidates[:5]):
-                logger.debug(
-                    f"   {i + 1}. {cand.get('title', 'Unknown')} - {cand.get('artist', 'Unknown')} ({cand['similarity_score']:.3f})"
-                )
+        logger.info(f"📊 Found {len(top_candidates)} candidate tracks")
 
         return {
             "candidate_tracks": top_candidates,
             "messages": [
-                AIMessage(content=f"Found {len(top_candidates)} vibe-matched tracks")
-            ],
-        }
-
-    def build_playlist_node(self, state: DJAgentState) -> Dict:
-        """Build an ordered playlist considering energy flow."""
-        candidates = state["candidate_tracks"]
-        context = state["context"]
-        energy_pattern = state.get("energy_pattern", "wave")
-        playlist_length = context.get("playlist_length", 10)
-
-        logger.info("📝 Building playlist...")
-        logger.info(f"   - Pattern: {energy_pattern}")
-        logger.info(f"   - Target length: {playlist_length}")
-        logger.info(f"   - Available candidates: {len(candidates)}")
-
-        # Build playlist based on energy pattern
-        playlist = self._build_playlist_by_pattern(
-            candidates, energy_pattern, playlist_length, context["current_energy"]
-        )
-
-        logger.info(f"✅ Built {len(playlist)}-track playlist")
-
-        # Log energy flow
-        energy_flow = [self._calculate_energy_level(t) for t in playlist]
-        logger.debug("   Energy flow:")
-        for i, (track, energy) in enumerate(zip(playlist, energy_flow)):
-            logger.debug(
-                f"   {i + 1}. {track.get('title', 'Unknown')} - Energy: {energy:.2f}"
-            )
-
-        # Log BPM progression
-        bpm_flow = [t.get("bpm", 0) for t in playlist]
-        if bpm_flow:
-            logger.debug(f"   BPM range: {min(bpm_flow):.0f} - {max(bpm_flow):.0f}")
-
-        return {
-            "playlist": playlist,
-            "messages": [
                 AIMessage(
-                    content=f"Built {len(playlist)}-track playlist with {energy_pattern} pattern"
+                    content=f"Found {len(top_candidates)} tracks with similar BPM"
                 )
             ],
         }
 
-    def plan_transitions_node(self, state: DJAgentState) -> Dict:
-        """Plan transitions between tracks in the playlist."""
+    def build_playlist_node(self, state: DJAgentState) -> Dict:
+        """Build an ordered playlist - simplified for non-agentic workflow."""
+        candidates = state["candidate_tracks"]
+        context = state["context"]
+        playlist_length = context.get("playlist_length", 10)
+
+        logger.info("📝 Building playlist...")
+        logger.info(f"   - Target length: {playlist_length}")
+        logger.info(f"   - Available candidates: {len(candidates)}")
+
+        # Simple approach - just take top scored tracks
+        playlist = candidates[:playlist_length]
+
+        logger.info(f"✅ Built {len(playlist)}-track playlist")
+
+        # Log track list
+        for i, track in enumerate(playlist):
+            logger.debug(
+                f"   {i + 1}. {track.get('title', 'Unknown')} - {track.get('artist', 'Unknown')} ({track.get('bpm', 0):.0f} BPM)"
+            )
+
+        return {
+            "playlist": playlist,
+            "messages": [AIMessage(content=f"Built {len(playlist)}-track playlist")],
+        }
+
+    async def plan_transitions_node(self, state: DJAgentState) -> Dict:
+        """Plan transitions between tracks in the playlist using AI-powered analysis."""
         playlist = state["playlist"]
         current_track = state["current_track"]
 
-        logger.info("🔄 Planning transitions...")
+        logger.info("🔄 Planning AI-powered transitions...")
 
         transitions = []
 
         # Plan transition from current track to first playlist track
         if playlist and current_track:
-            first_transition = self._plan_transition(current_track, playlist[0])
+            first_transition = await self._plan_transition_agentic(
+                current_track, playlist[0]
+            )
             transitions.append(first_transition)
             logger.debug(
                 f"   → From current to first: BPM {current_track.get('bpm', 0):.0f} → {playlist[0].get('bpm', 0):.0f}"
@@ -1029,710 +1231,111 @@ class DJAgent:
 
         # Plan transitions between playlist tracks
         for i in range(len(playlist) - 1):
-            transition = self._plan_transition(playlist[i], playlist[i + 1])
+            transition = await self._plan_transition_agentic(
+                playlist[i], playlist[i + 1]
+            )
             transitions.append(transition)
 
             if i < 3:  # Log first few transitions
                 from_bpm = playlist[i].get("bpm", 0)
                 to_bpm = playlist[i + 1].get("bpm", 0)
+                effect_type = transition.get("effect_plan", {}).get(
+                    "profile", "unknown"
+                )
                 logger.debug(
-                    f"   → Track {i + 1} to {i + 2}: BPM {from_bpm:.0f} → {to_bpm:.0f} ({transition['mix_duration']} bars)"
+                    f"   → Track {i + 1} to {i + 2}: BPM {from_bpm:.0f} → {to_bpm:.0f} ({effect_type})"
                 )
 
-        logger.info(f"✅ Planned {len(transitions)} transitions")
+        logger.info(f"✅ AI planned {len(transitions)} transitions")
 
-        # Log suggested effects summary
-        all_effects = []
+        # Log AI-designed effects summary
+        effect_profiles = {}
         for t in transitions:
-            all_effects.extend(t.get("suggested_effects", []))
-        if all_effects:
-            effect_counts = {}
-            for effect in all_effects:
-                effect_counts[effect] = effect_counts.get(effect, 0) + 1
-            logger.debug(f"   Suggested effects: {dict(effect_counts)}")
+            profile = t.get("effect_plan", {}).get("profile", "unknown")
+            effect_profiles[profile] = effect_profiles.get(profile, 0) + 1
+
+        if effect_profiles:
+            logger.debug(f"   AI transition profiles: {dict(effect_profiles)}")
 
         return {
             "transitions": transitions,
-            "messages": [AIMessage(content=f"Planned {len(transitions)} transitions")],
+            "messages": [
+                AIMessage(content=f"AI planned {len(transitions)} transitions")
+            ],
         }
 
     # Helper methods
 
-    def _calculate_energy_level(self, track: Dict) -> float:
-        """Calculate energy level from BPM and mood."""
-        bpm = track.get("bpm") or 0
+    async def _plan_transition_agentic(self, from_track: Dict, to_track: Dict) -> Dict:
+        """Plan transition using AI-powered analysis."""
+        from utils.dj_llm import DJLLMService
 
-        # For SQLite, we have energy_level directly stored
-        if "energy_level" in track and track["energy_level"] is not None:
-            return track["energy_level"]
-
-        # Otherwise calculate from BPM
-        # Normalize BPM to 0-1 scale (60-200 BPM range)
-        bpm_energy = (bpm - 60) / 140
-        bpm_energy = max(0, min(1, bpm_energy))
-
-        return bpm_energy
-
-    def _get_dominant_vibe(self, mood: Dict) -> str:
-        """Get the dominant mood/vibe from mood scores."""
-        # For SQLite, we don't have mood vector, so use genre/BPM
-        return "neutral"
-
-    def _suggest_energy_direction(
-        self, current_energy: float, time_of_day: str, pattern: str
-    ) -> str:
-        """Suggest whether energy should go up, down, or maintain."""
-        hour = datetime.now().hour
-
-        if pattern == "build_up":
-            return "increase"
-        elif pattern == "cool_down":
-            return "decrease"
-        elif pattern == "peak_time":
-            return "maintain" if current_energy > 0.7 else "increase"
-        else:  # wave pattern
-            if current_energy > 0.7:
-                return "decrease"
-            elif current_energy < 0.3:
-                return "increase"
-            else:
-                return "maintain"
-
-    def _calculate_similarity(
-        self, reference: Dict, candidate: Dict, context: Dict
-    ) -> float:
-        """Calculate similarity score between tracks."""
-        weights = {
-            "bpm_proximity": 0.30,
-            "energy_compatibility": 0.25,
-            "key_compatibility": 0.20,
-            "genre_affinity": 0.20,
-            "danceability": 0.05,
-        }
-
-        scores = {}
-
-        # BPM proximity (within 5% is perfect match)
-        ref_bpm = reference.get("bpm") or 0
-        cand_bpm = candidate.get("bpm") or 0
-        if ref_bpm > 0:
-            bpm_diff = abs(ref_bpm - cand_bpm) / ref_bpm
-            scores["bpm_proximity"] = max(0, 1 - (bpm_diff * 20))  # 5% diff = 0 score
-        else:
-            scores["bpm_proximity"] = 0.5
-
-        # Energy compatibility
-        ref_energy = reference.get("energy_level", 0.5)
-        cand_energy = candidate.get(
-            "energy_level", 0.5
-        ) or self._calculate_energy_level(candidate)
-        energy_diff = abs(ref_energy - cand_energy)
-
-        # Consider context for energy compatibility
-        if context.get("suggested_energy_direction") == "increase":
-            if cand_energy > ref_energy:
-                scores["energy_compatibility"] = 1 - (energy_diff * 0.5)
-            else:
-                scores["energy_compatibility"] = 0.5 - energy_diff
-        elif context.get("suggested_energy_direction") == "decrease":
-            if cand_energy < ref_energy:
-                scores["energy_compatibility"] = 1 - (energy_diff * 0.5)
-            else:
-                scores["energy_compatibility"] = 0.5 - energy_diff
-        else:  # maintain
-            scores["energy_compatibility"] = 1 - energy_diff
-
-        # Key compatibility using Camelot Wheel
-        ref_camelot = reference.get("camelot")
-        cand_camelot = candidate.get("camelot")
-
-        if ref_camelot and cand_camelot:
-            # Extract number and letter from Camelot notation (e.g., "8B" -> 8, "B")
-            try:
-                ref_num = int(ref_camelot[:-1])
-                ref_letter = ref_camelot[-1]
-                cand_num = int(cand_camelot[:-1])
-                cand_letter = cand_camelot[-1]
-
-                # Perfect match (same key)
-                if ref_camelot == cand_camelot:
-                    scores["key_compatibility"] = 1.0
-                # Adjacent on wheel (+1 or -1 with wraparound)
-                elif (
-                    abs(ref_num - cand_num) == 1
-                    or (ref_num == 12 and cand_num == 1)
-                    or (ref_num == 1 and cand_num == 12)
-                ):
-                    scores["key_compatibility"] = 0.8
-                # Same letter (major/minor relativity)
-                elif ref_letter == cand_letter:
-                    scores["key_compatibility"] = 0.6
-                # Energy boost (going from A to B)
-                elif ref_letter == "A" and cand_letter == "B" and ref_num == cand_num:
-                    scores["key_compatibility"] = 0.7
-                else:
-                    scores["key_compatibility"] = 0.3
-            except:
-                scores["key_compatibility"] = 0.5
-        else:
-            scores["key_compatibility"] = 0.5
-
-        # Genre affinity
-        ref_genre = (reference.get("genre") or "").lower()
-        cand_genre = (candidate.get("genre") or "").lower()
-        if ref_genre and cand_genre:
-            if ref_genre == cand_genre:
-                scores["genre_affinity"] = 1.0
-            elif any(word in cand_genre for word in ref_genre.split()) or any(
-                word in ref_genre for word in cand_genre.split()
-            ):
-                scores["genre_affinity"] = 0.7
-            else:
-                scores["genre_affinity"] = 0.3
-        else:
-            scores["genre_affinity"] = 0.5
-
-        # Danceability score
-        cand_danceability = candidate.get("danceability", 0.7)
-        scores["danceability"] = cand_danceability
-
-        # Calculate weighted total
-        total_score = sum(
-            scores.get(factor, 0) * weight for factor, weight in weights.items()
+        logger.debug(
+            f"🔄 AI Planning transition: {from_track.get('title', 'Unknown')} -> {to_track.get('title', 'Unknown')}"
         )
 
-        # Log detailed scoring for high-scoring tracks
-        if total_score > 0.7:
-            logger.debug(
-                f"   High score for {candidate.get('title', 'Unknown')}: {total_score:.3f}"
-            )
-            logger.debug(
-                f"     - BPM: {scores.get('bpm_proximity', 0):.2f}, Energy: {scores.get('energy_compatibility', 0):.2f}, Genre: {scores.get('genre_affinity', 0):.2f}"
-            )
+        dj_service = DJLLMService()
 
-        return total_score
-
-    def _build_playlist_by_pattern(
-        self, candidates: List[Dict], pattern: str, length: int, current_energy: float
-    ) -> List[Dict]:
-        """Build playlist according to energy pattern."""
-        if not candidates:
-            return []
-
-        playlist = []
-        remaining = candidates.copy()
-
-        # Calculate target energies for each position
-        target_energies = []
-        for i in range(length):
-            if pattern == "build_up":
-                target = current_energy + (i + 1) * (1 - current_energy) / length
-            elif pattern == "cool_down":
-                target = current_energy - (i + 1) * current_energy / length
-            elif pattern == "peak_time":
-                target = max(0.8, current_energy)
-            else:  # wave
-                phase = i % 4
-                if phase < 2:
-                    target = current_energy + 0.2
-                else:
-                    target = current_energy - 0.2
-            target_energies.append(max(0, min(1, target)))
-
-        # Select tracks to match target energies
-        for target_energy in target_energies:
-            if not remaining:
-                break
-
-            # Find best match for target energy
-            best_track = None
-            best_diff = float("inf")
-
-            for track in remaining:
-                track_energy = self._calculate_energy_level(track)
-                diff = abs(track_energy - target_energy)
-                if diff < best_diff:
-                    best_diff = diff
-                    best_track = track
-
-            if best_track:
-                playlist.append(best_track)
-                remaining.remove(best_track)
-
-        return playlist
-
-    def _create_transition_planning_graph(self):
-        """Create a LangGraph workflow for agentic transition planning."""
-        from langgraph.graph import StateGraph, END
-        from typing import TypedDict, List
-
-        class TransitionPlanningState(TypedDict):
-            from_track: Dict
-            to_track: Dict
-            from_analysis: Dict
-            to_analysis: Dict
-            transition_analysis: str
-            effect_plan: Dict
-            compatibility_score: float
-            messages: List[BaseMessage]
-
-        # Define transition planning tools
-        @tool
-        def get_track_analysis(filepath: str) -> Dict:
-            """Get comprehensive analysis for a track including BPM, key, energy, genre, and hot cues."""
-            try:
-                # Get track from database
-                db_path = os.path.join(os.path.dirname(__file__), "..", "tracks.db")
-                conn = sqlite3.connect(db_path)
-                cursor = conn.cursor()
-
-                cursor.execute("SELECT * FROM tracks WHERE filepath = ?", (filepath,))
-                columns = [description[0] for description in cursor.description]
-                row = cursor.fetchone()
-
-                track_data = {}
-                if row:
-                    track_data = dict(zip(columns, row))
-
-                cursor.close()
-                conn.close()
-
-                # Parse JSON fields from enhanced analysis
-                hot_cues = []
-                if track_data.get("hot_cues") and isinstance(
-                    track_data["hot_cues"], str
-                ):
-                    try:
-                        hot_cues = json.loads(track_data["hot_cues"])
-                    except:
-                        pass
-
-                structure = {}
-                if track_data.get("structure") and isinstance(
-                    track_data["structure"], str
-                ):
-                    try:
-                        structure = json.loads(track_data["structure"])
-                    except:
-                        pass
-
-                return {
-                    "filepath": filepath,
-                    "bpm": track_data.get("bpm"),
-                    "key": track_data.get("key"),
-                    "key_scale": track_data.get("key_scale"),
-                    "camelot": track_data.get("camelot"),
-                    "energy_level": track_data.get("energy_level"),
-                    "energy_profile": track_data.get("energy_profile"),
-                    "genre": track_data.get("genre"),
-                    "hot_cues": hot_cues,
-                    "structure": structure,
-                    "title": track_data.get("title"),
-                    "artist": track_data.get("artist"),
-                }
-            except Exception as e:
-                logger.error(f"Error getting track analysis: {e}")
-                return {"error": str(e)}
-
-        @tool
-        def calculate_bpm_compatibility(from_bpm: float, to_bpm: float) -> Dict:
-            """Analyze BPM relationship between tracks and suggest tempo adjustments."""
-            if not from_bpm or not to_bpm:
-                return {"compatible": False, "reason": "Missing BPM data"}
-
-            bpm_diff = abs(from_bpm - to_bpm)
-            bpm_ratio = max(from_bpm, to_bpm) / min(from_bpm, to_bpm)
-
-            analysis = {
-                "from_bpm": from_bpm,
-                "to_bpm": to_bpm,
-                "difference": bpm_diff,
-                "ratio": bpm_ratio,
-                "compatible": False,
-                "technique": "",
-                "pitch_adjust": 0,
-            }
-
-            if bpm_diff <= 5:
-                analysis["compatible"] = True
-                analysis["technique"] = "direct_blend"
-            elif bpm_diff <= 10:
-                analysis["compatible"] = True
-                analysis["technique"] = "tempo_bend"
-                analysis["pitch_adjust"] = (to_bpm - from_bpm) / from_bpm * 100
-            elif bpm_ratio == 2.0 or bpm_ratio == 0.5:
-                analysis["compatible"] = True
-                analysis["technique"] = "half_double_time"
-            else:
-                analysis["technique"] = "creative_transition"
-
-            return analysis
-
-        @tool
-        def design_transition_effects(
-            transition_type: str,
-            bpm_difference: float,
-            energy_change: float,
-            duration: float = 5.0,
-        ) -> Dict:
-            """Design a sequence of effects for the transition."""
-            effect_plan = {
-                "profile": transition_type,
-                "effects": [],
-                "crossfade_curve": "s-curve",
-            }
-
-            # Map transition types to effect sequences
-            if transition_type == "tempo_blend" and bpm_difference > 10:
-                effect_plan["effects"].extend(
-                    [
-                        {
-                            "type": "echo",
-                            "start_at": 0.0,
-                            "duration": 2.0,
-                            "intensity": 0.6,
-                        },
-                        {
-                            "type": "filter",
-                            "start_at": 1.0,
-                            "duration": 3.0,
-                            "intensity": 0.8,
-                        },
-                    ]
-                )
-            elif transition_type == "energy_shift" and abs(energy_change) > 0.3:
-                effect_plan["effects"].append(
-                    {
-                        "type": "filter",
-                        "start_at": 0.0,
-                        "duration": duration * 0.8,
-                        "intensity": 0.7 if energy_change > 0 else 0.3,
-                    }
-                )
-            elif transition_type == "creative_transition":
-                effect_plan["effects"].extend(
-                    [
-                        {
-                            "type": "echo",
-                            "start_at": 0.0,
-                            "duration": 1.5,
-                            "intensity": 0.8,
-                        },
-                        {
-                            "type": "filter",
-                            "start_at": 1.0,
-                            "duration": 3.0,
-                            "intensity": 0.9,
-                        },
-                    ]
-                )
-            else:
-                # Default smooth transition
-                effect_plan["effects"].append(
-                    {
-                        "type": "filter",
-                        "start_at": 0.0,
-                        "duration": 2.0,
-                        "intensity": 0.4,
-                    }
-                )
-
-            return effect_plan
-
-        # Create node functions
-        def analyze_tracks_node(state: TransitionPlanningState) -> Dict:
-            """Analyze both tracks to get their musical properties."""
-            messages = state.get("messages", [])
-            from_track = state["from_track"]
-            to_track = state["to_track"]
-
-            # Create analysis prompt
-            prompt = f"""Analyze these two tracks for DJ mixing compatibility.
-            
-Track A: {from_track.get("title", "Unknown")} by {from_track.get("artist", "Unknown")}
-Track B: {to_track.get("title", "Unknown")} by {to_track.get("artist", "Unknown")}
-
-Use the get_track_analysis tool to get detailed information about each track including BPM, key, energy, genre, and hot cues."""
-
-            messages.append(HumanMessage(content=prompt))
-
-            # Bind tools to LLM
-            llm_with_tools = self.llm.bind_tools([get_track_analysis])
-            response = llm_with_tools.invoke(messages)
-
-            return {"messages": messages + [response]}
-
-        def plan_transition_node(state: TransitionPlanningState) -> Dict:
-            """Plan the transition strategy based on track analysis."""
-            messages = state.get("messages", [])
-
-            prompt = """Based on the track analysis, plan the optimal transition strategy.
-
-Consider:
-1. BPM compatibility - use calculate_bpm_compatibility tool
-2. Key compatibility using Camelot Wheel system (if available):
-   - Same key number = perfect match
-   - +1/-1 on wheel = compatible 
-   - Same letter (A/B) = compatible
-3. Energy levels and profiles
-4. Genre compatibility
-5. Available hot cues for mixing points
-6. Song structure (intro, verse, chorus, outro)
-
-Provide a detailed transition plan including:
-- Compatibility score (0-1)
-- Recommended mixing technique
-- Suggested effects and timing based on energy change
-- Mix in/out points using hot cues or structure segments
-- Creative suggestions for making the transition memorable"""
-
-            messages.append(HumanMessage(content=prompt))
-
-            # Bind tools to LLM
-            llm_with_tools = self.llm.bind_tools([calculate_bpm_compatibility])
-            response = llm_with_tools.invoke(messages)
-
-            return {"messages": messages + [response]}
-
-        def design_effects_node(state: TransitionPlanningState) -> Dict:
-            """Design the specific effects sequence for the transition."""
-            messages = state.get("messages", [])
-
-            prompt = """Based on your transition analysis, design the specific effects sequence.
-
-Use the design_transition_effects tool to create an effect plan that includes:
-- Effect types (filter, echo) - DO NOT use scratch effect
-- Timing (when each effect starts relative to hot cues or structure)
-- Duration and intensity based on energy profiles
-- Crossfade curve type
-
-Consider:
-- Energy profile changes (dynamic, high, medium, low)
-- Key compatibility (use subtle effects for compatible keys, heavier for incompatible)
-- Structure transitions (e.g., outro to intro, verse to chorus)
-- Hot cue points for precise timing
-
-Make the effects musically appropriate for the transition type and genre."""
-
-            messages.append(HumanMessage(content=prompt))
-
-            # Bind tools to LLM
-            llm_with_tools = self.llm.bind_tools([design_transition_effects])
-            response = llm_with_tools.invoke(messages)
-
-            return {"messages": messages + [response]}
-
-        def format_output_node(state: TransitionPlanningState) -> Dict:
-            """Format the final transition plan output."""
-            messages = state.get("messages", [])
-
-            # Extract information from the conversation
-            from_analysis = {}
-            to_analysis = {}
-            effect_plan = {}
-            compatibility_score = 0.5
-
-            # Parse tool calls and responses
-            for i, msg in enumerate(messages):
-                if hasattr(msg, "tool_calls"):
-                    for tool_call in msg.tool_calls:
-                        # Look for the tool response in the next message
-                        if i + 1 < len(messages) and hasattr(
-                            messages[i + 1], "content"
-                        ):
-                            try:
-                                tool_result = json.loads(messages[i + 1].content)
-
-                                if tool_call["name"] == "get_track_analysis":
-                                    # Determine which track this is for
-                                    filepath = tool_call.get("args", {}).get(
-                                        "filepath", ""
-                                    )
-                                    if state["from_track"].get("filepath") == filepath:
-                                        from_analysis = tool_result
-                                    elif state["to_track"].get("filepath") == filepath:
-                                        to_analysis = tool_result
-
-                                elif tool_call["name"] == "design_transition_effects":
-                                    effect_plan = tool_result
-
-                                elif tool_call["name"] == "calculate_bpm_compatibility":
-                                    # Extract compatibility score from BPM analysis
-                                    if tool_result.get("compatible"):
-                                        compatibility_score = (
-                                            0.8
-                                            if tool_result.get("technique")
-                                            == "direct_blend"
-                                            else 0.6
-                                        )
-                                    else:
-                                        compatibility_score = 0.3
-                            except:
-                                pass
-
-            # Get the final analysis from the last AI message
-            for msg in reversed(messages):
-                if isinstance(msg, AIMessage) and not hasattr(msg, "tool_calls"):
-                    transition_analysis = msg.content
-                    break
-            else:
-                transition_analysis = "Transition analysis completed"
+        try:
+            # Use AI to plan the transition
+            transition_plan = await dj_service.plan_transition(from_track, to_track)
 
             return {
-                "from_analysis": from_analysis,
-                "to_analysis": to_analysis,
-                "transition_analysis": transition_analysis,
-                "effect_plan": effect_plan,
-                "compatibility_score": compatibility_score,
+                "from_track": from_track.get("filepath"),
+                "to_track": to_track.get("filepath"),
+                "score": transition_plan.compatibility_score,
+                "effect_plan": {
+                    "profile": transition_plan.transition_type,
+                    "effects": [
+                        {
+                            "type": effect.type,
+                            "start_at": effect.start_at,
+                            "duration": effect.duration,
+                            "intensity": effect.intensity
+                        } if hasattr(effect, 'type') else effect
+                        for effect in transition_plan.effects
+                    ],
+                    "reasoning": transition_plan.technique_notes,
+                    "crossfade_curve": "s-curve",  # Default curve
+                },
+                "from_analysis": {
+                    "bpm": from_track.get("bpm"),
+                    "energy": from_track.get("energy_level"),
+                },
+                "to_analysis": {
+                    "bpm": to_track.get("bpm"),
+                    "energy": to_track.get("energy_level"),
+                },
             }
-
-        # Create separate tool nodes for each stage to avoid message ordering issues
-        analyze_tool_node = ToolNode([get_track_analysis], handle_tool_errors=True)
-        plan_tool_node = ToolNode(
-            [calculate_bpm_compatibility], handle_tool_errors=True
-        )
-        design_tool_node = ToolNode(
-            [design_transition_effects], handle_tool_errors=True
-        )
-
-        # Build the workflow
-        workflow = StateGraph(TransitionPlanningState)
-
-        # Add nodes
-        workflow.add_node("analyze_tracks", analyze_tracks_node)
-        workflow.add_node("analyze_tools", analyze_tool_node)
-        workflow.add_node("plan_transition", plan_transition_node)
-        workflow.add_node("plan_tools", plan_tool_node)
-        workflow.add_node("design_effects", design_effects_node)
-        workflow.add_node("design_tools", design_tool_node)
-        workflow.add_node("format_output", format_output_node)
-
-        # Add conditional edges for tool execution
-        def should_continue_analysis(state):
-            messages = state.get("messages", [])
-            if (
-                messages
-                and hasattr(messages[-1], "tool_calls")
-                and messages[-1].tool_calls
-            ):
-                return "analyze_tools"
-            return "plan_transition"
-
-        def should_continue_planning(state):
-            messages = state.get("messages", [])
-            if (
-                messages
-                and hasattr(messages[-1], "tool_calls")
-                and messages[-1].tool_calls
-            ):
-                return "plan_tools"
-            return "design_effects"
-
-        def should_continue_design(state):
-            messages = state.get("messages", [])
-            if (
-                messages
-                and hasattr(messages[-1], "tool_calls")
-                and messages[-1].tool_calls
-            ):
-                return "design_tools"
-            return "format_output"
-
-        # Set entry and edges
-        workflow.set_entry_point("analyze_tracks")
-        workflow.add_conditional_edges("analyze_tracks", should_continue_analysis)
-        workflow.add_edge("analyze_tools", "plan_transition")
-        workflow.add_conditional_edges("plan_transition", should_continue_planning)
-        workflow.add_edge("plan_tools", "design_effects")
-        workflow.add_conditional_edges("design_effects", should_continue_design)
-        workflow.add_edge("design_tools", "format_output")
-        workflow.add_edge("format_output", END)
-
-        return workflow.compile()
-
-    async def _plan_transition_agentic(self, from_track: Dict, to_track: Dict) -> Dict:
-        """Plan transition using basic logic (agentic disabled due to OpenAI tool message errors)."""
-        # Use basic transition logic instead of complex agentic workflow to avoid OpenAI tool message errors
-        logger.debug(
-            f"🔄 Planning transition: {from_track.get('title', 'Unknown')} -> {to_track.get('title', 'Unknown')}"
-        )
-
-        # Calculate BPM compatibility
-        from_bpm = from_track.get("bpm", 120)
-        to_bpm = to_track.get("bpm", 120)
-        bpm_diff = abs(from_bpm - to_bpm)
-
-        # Calculate energy levels
-        from_energy = from_track.get("energy_level", 0.5)
-        to_energy = to_track.get("energy_level", 0.5)
-        energy_change = to_energy - from_energy
-
-        # Determine effect plan based on compatibility
-        if bpm_diff <= 5:
-            # Close BPM - smooth transition
-            effect_plan = {
-                "profile": "smooth_blend",
-                "effects": [
-                    {"type": "echo", "start_at": 0.6, "duration": 2.0, "intensity": 0.3}
-                ],
-                "reasoning": f"Close BPM match ({from_bpm:.1f} -> {to_bpm:.1f})",
-                "crossfade_curve": "smooth",
+        except Exception as e:
+            logger.error(f"AI transition planning failed: {e}")
+            # Simple fallback
+            return {
+                "from_track": from_track.get("filepath"),
+                "to_track": to_track.get("filepath"),
+                "score": 0.5,
+                "effect_plan": {
+                    "profile": "smooth_blend",
+                    "effects": [
+                        {
+                            "type": "filter",
+                            "start_at": 0,
+                            "duration": 3,
+                            "intensity": 0.5,
+                        }
+                    ],
+                    "reasoning": "Fallback transition",
+                    "crossfade_curve": "linear",
+                },
+                "from_analysis": {
+                    "bpm": from_track.get("bpm", 120),
+                    "energy": from_track.get("energy_level", 0.5),
+                },
+                "to_analysis": {
+                    "bpm": to_track.get("bpm", 120),
+                    "energy": to_track.get("energy_level", 0.5),
+                },
             }
-            score = 0.8
-        elif bpm_diff <= 15:
-            # Moderate BPM difference
-            effect_plan = {
-                "profile": "filter_sweep",
-                "effects": [
-                    {
-                        "type": "filter",
-                        "start_at": 0.3,
-                        "duration": 3.0,
-                        "intensity": 0.6,
-                    }
-                ],
-                "reasoning": f"Moderate BPM difference ({from_bpm:.1f} -> {to_bpm:.1f})",
-                "crossfade_curve": "linear",
-            }
-            score = 0.6
-        else:
-            # Large BPM difference - more dramatic effects
-            effect_plan = {
-                "profile": "dramatic_shift",
-                "effects": [
-                    {
-                        "type": "filter",
-                        "start_at": 0.2,
-                        "duration": 2.0,
-                        "intensity": 0.8,
-                    },
-                    {
-                        "type": "echo",
-                        "start_at": 0.7,
-                        "duration": 1.5,
-                        "intensity": 0.5,
-                    },
-                ],
-                "reasoning": f"Large BPM difference ({from_bpm:.1f} -> {to_bpm:.1f})",
-                "crossfade_curve": "linear",
-            }
-            score = 0.4
-
-        # Adjust for energy changes
-        if energy_change > 0.3:
-            effect_plan["effects"].append(
-                {"type": "echo", "start_at": 0.8, "duration": 1.0, "intensity": 0.4}
-            )
-            effect_plan["reasoning"] += " + energy boost"
-
-        return {
-            "from_track": from_track.get("filepath"),
-            "to_track": to_track.get("filepath"),
-            "score": score,
-            "effect_plan": effect_plan,
-            "from_analysis": {"bpm": from_bpm, "energy": from_energy},
-            "to_analysis": {"bpm": to_bpm, "energy": to_energy},
-        }
 
     async def suggest_next_track(
         self,
@@ -1864,7 +1467,7 @@ What track should I play after {current_track}?"""
         ):
             try:
                 current_track["beat_times"] = json.loads(current_track["beat_times"])
-            except:
+            except (json.JSONDecodeError, TypeError):
                 current_track["beat_times"] = []
 
         # Prepare state
@@ -1976,7 +1579,6 @@ What track should I play after {current_track}?"""
             1. Search for tracks matching the vibe using search_tracks_by_vibe
             2. Get detailed track information using get_track_details if needed
             3. Filter by energy levels using filter_tracks_by_energy if needed
-            4. Sort tracks for smooth BPM progression using sort_tracks_by_bpm_progression
 
             IMPORTANT: 
             - Select UNIQUE tracks only - do not include the same track multiple times
@@ -1984,7 +1586,14 @@ What track should I play after {current_track}?"""
               * A list of track filepaths (exactly {length} UNIQUE tracks)
               * Mixing notes for each track explaining why it fits and how to mix it
 
-            The finalize_playlist tool is required to complete the playlist creation."""
+            The finalize_playlist tool is required to complete the playlist creation.
+            Your task is NOT complete until you have called finalize_playlist.
+            
+            Example of correct final step:
+            finalize_playlist(
+                track_filepaths=["/path/track1.mp3", "/path/track2.mp3", ...],
+                mixing_notes=["High energy opener", "Smooth transition from track 1", ...]
+            )"""
 
         user_message = f"Create a {length}-track playlist with {vibe_description}"
 
@@ -2015,6 +1624,10 @@ What track should I play after {current_track}?"""
             # Get the finalized playlist directly from the result
             finalized_playlist = result.get("finalized_playlist")
 
+            # Initialize variables that will be used in the return statement
+            transition_plan = None
+            hot_cue_analysis = None
+
             if finalized_playlist:
                 logger.info(
                     f"📋 Found finalized playlist with {len(finalized_playlist)} tracks"
@@ -2023,9 +1636,6 @@ What track should I play after {current_track}?"""
                 # Step 2: Hot Cue Transition Planning
                 logger.info("=" * 50)
                 logger.info("🎛️ STEP 2: HOT CUE TRANSITION PLANNING")
-
-                transition_plan = None
-                hot_cue_analysis = None
 
                 try:
                     # Extract track filepaths for hot cue analysis
@@ -2092,23 +1702,81 @@ What track should I play after {current_track}?"""
 
             logger.info("=" * 50)
 
+            # Enrich finalized_playlist with full track data for transition planning
+            enriched_playlist = []
+            if finalized_playlist:
+                logger.info("📚 Enriching playlist with full track metadata...")
+                cursor = self.db.adapter.connection.cursor()
+
+                for track in finalized_playlist:
+                    filepath = (
+                        track.get("filepath") if isinstance(track, dict) else None
+                    )
+                    if filepath:
+                        cursor.execute(
+                            """
+                            SELECT filepath, title, artist, bpm, key, energy_level, duration, genre
+                            FROM tracks WHERE filepath = ?
+                            """,
+                            (filepath,),
+                        )
+                        result = cursor.fetchone()
+
+                        if result:
+                            columns = [
+                                description[0] for description in cursor.description
+                            ]
+                            full_track = dict(zip(columns, result))
+                            # Preserve mixing notes if they exist
+                            if isinstance(track, dict) and "mixing_note" in track:
+                                full_track["mixing_note"] = track["mixing_note"]
+                            enriched_playlist.append(full_track)
+                        else:
+                            # Fallback with basic info
+                            logger.warning(f"⚠️ Track not found in DB: {filepath}")
+                            enriched_playlist.append(
+                                {
+                                    "filepath": filepath,
+                                    "title": os.path.basename(filepath),
+                                    "artist": "Unknown",
+                                    "bpm": 120,
+                                    "energy_level": 0.5,
+                                    "mixing_note": track.get("mixing_note", "")
+                                    if isinstance(track, dict)
+                                    else "",
+                                }
+                            )
+
+                cursor.close()
+                logger.info(
+                    f"✅ Enriched {len(enriched_playlist)} tracks with metadata"
+                )
+
+                # Use enriched playlist for display
+                finalized_playlist = enriched_playlist
+
             # Generate transitions with effect plans using agentic workflow
             transitions_with_effects = []
-            if finalized_playlist and len(finalized_playlist) > 1:
+            if enriched_playlist and len(enriched_playlist) > 1:
                 logger.info(
-                    f"🎯 Planning transitions for {len(finalized_playlist)} tracks using agentic workflow..."
+                    f"🎯 Planning transitions for {len(enriched_playlist)} tracks using agentic workflow..."
                 )
-                for i in range(len(finalized_playlist) - 1):
-                    # Use the new agentic transition planning
-                    transition = await self._plan_transition_agentic(
-                        finalized_playlist[i], finalized_playlist[i + 1]
+                try:
+                    for i in range(len(enriched_playlist) - 1):
+                        # Use the new agentic transition planning
+                        transition = await self._plan_transition_agentic(
+                            enriched_playlist[i], enriched_playlist[i + 1]
+                        )
+                        transitions_with_effects.append(transition)
+                        if i == 0:  # Log the first transition for debugging
+                            logger.info(f"   First transition: {transition}")
+                    logger.info(
+                        f"📊 Generated {len(transitions_with_effects)} transitions with agentic planning"
                     )
-                    transitions_with_effects.append(transition)
-                    if i == 0:  # Log the first transition for debugging
-                        logger.info(f"   First transition: {transition}")
-                logger.info(
-                    f"📊 Generated {len(transitions_with_effects)} transitions with agentic planning"
-                )
+                except Exception as e:
+                    logger.error(f"❌ Error in transition planning: {e}")
+                    # Continue without transitions rather than failing entirely
+                    transitions_with_effects = []
 
             return {
                 "success": True,
@@ -2124,6 +1792,32 @@ What track should I play after {current_track}?"""
         except Exception as e:
             logger.error(f"❌ Error in agentic generation: {str(e)}")
             logger.info("=" * 50)
+
+            # Try to return partial results if we have a playlist
+            if "finalized_playlist" in locals() and finalized_playlist:
+                logger.info(
+                    f"⚠️ Returning partial results with {len(finalized_playlist)} tracks"
+                )
+                return {
+                    "success": True,  # Partial success
+                    "error": str(e),
+                    "partial": True,
+                    "response": response_text
+                    if "response_text" in locals()
+                    else "Error during generation",
+                    "thread_id": thread_id,
+                    "finalized_playlist": finalized_playlist,
+                    "transition_plan": transition_plan
+                    if "transition_plan" in locals()
+                    else None,
+                    "hot_cue_analysis": hot_cue_analysis
+                    if "hot_cue_analysis" in locals()
+                    else None,
+                    "transitions": transitions_with_effects
+                    if "transitions_with_effects" in locals()
+                    else [],
+                }
+
             return {"success": False, "error": str(e), "thread_id": thread_id}
 
     async def _generate_playlist_from_seed(
@@ -2156,7 +1850,7 @@ What track should I play after {current_track}?"""
         if seed_track.get("beat_times") and isinstance(seed_track["beat_times"], str):
             try:
                 seed_track["beat_times"] = json.loads(seed_track["beat_times"])
-            except:
+            except (json.JSONDecodeError, TypeError):
                 seed_track["beat_times"] = []
 
         # Prepare context
@@ -2198,7 +1892,5 @@ What track should I play after {current_track}?"""
             "playlist": result["playlist"],
             "transitions": result["transitions"],
             "vibe_analysis": result["vibe_analysis"],
-            "energy_flow": [
-                self._calculate_energy_level(t) for t in result["playlist"]
-            ],
+            "energy_flow": [t.get("energy_level", 0.5) for t in result["playlist"]],
         }

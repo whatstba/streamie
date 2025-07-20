@@ -91,7 +91,7 @@ const AdvancedDjControls: React.FC = () => {
               <div className="flex items-center gap-2">
                 <MusicalNoteIcon className="h-4 w-4 text-blue-400" />
                 <span className="text-gray-300">
-                  {sourceBpm?.toFixed(1) || '?'} BPM
+                  {sourceBpm?.toFixed(2) || '?'} BPM
                   {bpmSyncEnabled && syncRatio !== 1 && (
                     <span className="text-green-400 ml-1">(synced)</span>
                   )}
@@ -134,65 +134,61 @@ const AdvancedDjControls: React.FC = () => {
                 BPM Sync
               </h3>
 
-              <div className="bg-black/20 rounded-lg p-4 space-y-3">
-                <div className="flex items-center justify-between">
+              <div className="bg-black/20 rounded-lg p-4 space-y-3 relative">
+                {/* Coming Soon Overlay */}
+                <div className="absolute inset-0 bg-black/60 rounded-lg flex items-center justify-center z-10">
+                  <div className="text-center">
+                    <span className="text-white font-semibold text-sm">Coming Soon</span>
+                    <p className="text-gray-400 text-xs mt-1">BPM Sync features in development</p>
+                  </div>
+                </div>
+                
+                <div className="flex items-center justify-between opacity-50">
                   <span className="text-sm text-gray-300">Auto BPM Sync</span>
                   <button
-                    onClick={() => setBpmSync(!bpmSyncEnabled)}
-                    className={`px-3 py-1 rounded-full text-xs font-medium transition ${
-                      bpmSyncEnabled ? 'bg-green-600 text-white' : 'bg-gray-600 text-gray-300'
-                    }`}
+                    disabled
+                    className="px-3 py-1 rounded-full text-xs font-medium bg-gray-600 text-gray-300 cursor-not-allowed"
                   >
-                    {bpmSyncEnabled ? 'ON' : 'OFF'}
+                    OFF
                   </button>
                 </div>
 
                 {currentTrack && (
-                  <div className="text-sm space-y-1">
+                  <div className="text-sm space-y-1 opacity-50">
                     <div className="flex justify-between">
                       <span className="text-gray-400">Current:</span>
-                      <span className="text-white">{sourceBpm?.toFixed(1) || '?'} BPM</span>
+                      <span className="text-white">{sourceBpm?.toFixed(2) || '?'} BPM</span>
                     </div>
                     {nextTrack && (
                       <div className="flex justify-between">
                         <span className="text-gray-400">Next:</span>
-                        <span className="text-white">{targetBpm?.toFixed(1) || '?'} BPM</span>
-                      </div>
-                    )}
-                    {bpmSyncEnabled && (
-                      <div className="flex justify-between text-green-400">
-                        <span>Sync Ratio:</span>
-                        <span>{syncRatio.toFixed(3)}x</span>
+                        <span className="text-white">{targetBpm?.toFixed(2) || '?'} BPM</span>
                       </div>
                     )}
                   </div>
                 )}
 
-                <div className="space-y-2">
+                <div className="space-y-2 opacity-50">
                   <label className="text-sm text-gray-300 flex items-center gap-2">
                     <AdjustmentsHorizontalIcon className="h-4 w-4" />
-                    Pitch Shift: {pitchShift > 0 ? '+' : ''}
-                    {pitchShift} cents
+                    Pitch Shift: 0 cents
                   </label>
                   <input
-                    ref={pitchSliderRef}
+                    disabled
                     type="range"
                     min="-50"
                     max="50"
-                    value={pitchShift}
-                    onChange={(e) => setPitchShift(Number(e.target.value))}
-                    className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer slider"
+                    value={0}
+                    className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-not-allowed slider"
                   />
                 </div>
 
                 <button
-                  onClick={toggleBeatAlignment}
-                  className={`w-full px-3 py-2 rounded-lg text-sm font-medium transition ${
-                    beatAlignment ? 'bg-purple-600 text-white' : 'bg-gray-600 text-gray-300'
-                  }`}
+                  disabled
+                  className="w-full px-3 py-2 rounded-lg text-sm font-medium bg-gray-600 text-gray-300 cursor-not-allowed"
                 >
                   <ClockIcon className="h-4 w-4 inline mr-2" />
-                  Beat Alignment {beatAlignment ? 'ON' : 'OFF'}
+                  Beat Alignment OFF
                 </button>
               </div>
             </div>
@@ -204,56 +200,34 @@ const AdvancedDjControls: React.FC = () => {
                 Hot Cues
               </h3>
 
-              <div className="bg-black/20 rounded-lg p-4 space-y-3">
-                <div className="flex gap-2">
+              <div className="bg-black/20 rounded-lg p-4 space-y-3 relative">
+                {/* Coming Soon Overlay */}
+                <div className="absolute inset-0 bg-black/60 rounded-lg flex items-center justify-center z-10">
+                  <div className="text-center">
+                    <span className="text-white font-semibold text-sm">Coming Soon</span>
+                    <p className="text-gray-400 text-xs mt-1">Hot Cue features in development</p>
+                  </div>
+                </div>
+                
+                <div className="flex gap-2 opacity-50">
                   <input
+                    disabled
                     type="text"
-                    value={hotCueName}
-                    onChange={(e) => setHotCueName(e.target.value)}
                     placeholder="Cue name..."
-                    className="flex-1 px-3 py-2 bg-gray-800 rounded-lg text-white text-sm"
-                    onKeyPress={(e) => e.key === 'Enter' && handleAddHotCue()}
+                    className="flex-1 px-3 py-2 bg-gray-800 rounded-lg text-white text-sm cursor-not-allowed"
                   />
                   <button
-                    onClick={handleAddHotCue}
-                    disabled={!currentTrack || !hotCueName.trim()}
-                    className="px-4 py-2 bg-yellow-600 hover:bg-yellow-700 disabled:bg-gray-600 rounded-lg text-white text-sm font-medium transition"
+                    disabled
+                    className="px-4 py-2 bg-gray-600 rounded-lg text-white text-sm font-medium cursor-not-allowed"
                   >
                     Add
                   </button>
                 </div>
 
-                <div className="space-y-2 max-h-40 overflow-y-auto">
-                  {currentTrackCues.length === 0 ? (
-                    <p className="text-gray-400 text-sm text-center py-4">
-                      No hot cues for this track
-                    </p>
-                  ) : (
-                    currentTrackCues.map((cue) => (
-                      <div
-                        key={cue.id}
-                        className="flex items-center justify-between p-2 bg-gray-800/50 rounded-lg"
-                      >
-                        <div className="flex items-center gap-2">
-                          <div
-                            className="w-3 h-3 rounded-full"
-                            style={{ backgroundColor: cue.color }}
-                          />
-                          <span className="text-white text-sm font-medium">{cue.name}</span>
-                          <span className="text-gray-400 text-xs">
-                            {Math.floor(cue.time / 60)}:
-                            {(cue.time % 60).toFixed(0).padStart(2, '0')}
-                          </span>
-                        </div>
-                        <button
-                          onClick={() => jumpToHotCue(cue)}
-                          className="px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded text-white text-xs transition"
-                        >
-                          Jump
-                        </button>
-                      </div>
-                    ))
-                  )}
+                <div className="space-y-2 max-h-40 overflow-y-auto opacity-50">
+                  <p className="text-gray-400 text-sm text-center py-4">
+                    No hot cues for this track
+                  </p>
                 </div>
               </div>
             </div>
@@ -361,10 +335,10 @@ const AdvancedDjControls: React.FC = () => {
                   <p className="text-gray-400 text-sm">{currentTrack.artist || 'Unknown Artist'}</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-white font-mono text-lg">{sourceBpm?.toFixed(1) || '?'} BPM</p>
+                  <p className="text-white font-mono text-lg">{sourceBpm?.toFixed(2) || '?'} BPM</p>
                   {bpmSyncEnabled && syncRatio !== 1 && (
                     <p className="text-green-400 text-sm">
-                      Synced to {(sourceBpm! * syncRatio).toFixed(1)} BPM
+                      Synced to {(sourceBpm! * syncRatio).toFixed(2)} BPM
                     </p>
                   )}
                 </div>

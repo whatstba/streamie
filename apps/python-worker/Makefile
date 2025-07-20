@@ -39,12 +39,11 @@ clean:
 
 # Run linting
 lint:
-	flake8 . --exclude=venv,__pycache__
-	black . --check --exclude=venv
+	ruff check .
 
 # Format code
 format:
-	black . --exclude=venv
+	ruff format .
 
 # Full CI pipeline
 ci: clean lint test-coverage

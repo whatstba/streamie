@@ -4,6 +4,7 @@ import os
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 
+# Deprecated
 def interpret_mood(prompt):
     # Simple hardcoded mapping for MVP
     mapping = {

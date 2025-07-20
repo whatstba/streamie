@@ -372,10 +372,29 @@ export const AudioPlayerProvider: React.FC<AudioPlayerProviderProps> = ({ childr
         currentCompressorRef.current.attack.setValueAtTime(0.003, context.currentTime);
         currentCompressorRef.current.release.setValueAtTime(0.25, context.currentTime);
 
-        // Connect current track audio graph
-        currentSourceRef.current.connect(currentGainRef.current);
-        currentGainRef.current.connect(currentCompressorRef.current);
-        currentCompressorRef.current.connect(context.destination);
+        // Create effects chain if it doesn't exist
+        if (!filterRef.current || !delayRef.current) {
+          createEffectsChain();
+        }
+
+        // Connect the full audio chain with effects in place but bypassed
+        if (filterRef.current && delayRef.current) {
+          // Connect: source -> gain -> filter -> delay -> compressor -> destination
+          currentSourceRef.current.connect(currentGainRef.current);
+          currentGainRef.current.connect(filterRef.current);
+          filterRef.current.connect(delayRef.current);
+          delayRef.current.connect(currentCompressorRef.current);
+          currentCompressorRef.current.connect(context.destination);
+          
+          console.log('🎧 DJ MIND: Effects chain connected (bypassed)');
+        } else {
+          // Fallback: direct connection without effects
+          currentSourceRef.current.connect(currentGainRef.current);
+          currentGainRef.current.connect(currentCompressorRef.current);
+          currentCompressorRef.current.connect(context.destination);
+          
+          console.log('🎧 DJ MIND: Direct audio chain connected (no effects)');
+        }
 
         // Set initial gain value to match state volume
         currentGainRef.current.gain.value = state.volume;
@@ -408,7 +427,8 @@ export const AudioPlayerProvider: React.FC<AudioPlayerProviderProps> = ({ childr
         nextCompressorRef.current.attack.setValueAtTime(0.003, context.currentTime);
         nextCompressorRef.current.release.setValueAtTime(0.25, context.currentTime);
 
-        // Connect next track audio graph
+        // For next track, we don't need effects since it's just a crossfade target
+        // Direct connection is fine
         nextSourceRef.current.connect(nextGainRef.current);
         nextGainRef.current.connect(nextCompressorRef.current);
         nextCompressorRef.current.connect(context.destination);
@@ -1250,15 +1270,18 @@ export const AudioPlayerProvider: React.FC<AudioPlayerProviderProps> = ({ childr
       }
 
       // Clear any existing automation and set initial values BEFORE playback
-      // Use 0 for cancelScheduledValues to ensure all automation is cleared
-      currentGainRef.current.gain.cancelScheduledValues(0);
-      nextGainRef.current.gain.cancelScheduledValues(0);
+      // Add small offset to prevent glitches
+      const startTime = now + 0.05; // 50ms offset for smoother transitions
+      currentGainRef.current.gain.cancelScheduledValues(startTime);
+      nextGainRef.current.gain.cancelScheduledValues(startTime);
 
       const currentVolume = currentState.volume;
       // Get the actual current gain value (in case user seeked)
       const actualCurrentGain = currentGainRef.current.gain.value;
+      
+      // Set initial values with proper timing
       currentGainRef.current.gain.setValueAtTime(actualCurrentGain, now);
-      nextGainRef.current.gain.setValueAtTime(0.001, now); // Start at very low value, not 0
+      nextGainRef.current.gain.setValueAtTime(0.0001, now); // Even smaller initial value
 
       // IMPORTANT: Set element volume to 0 as a safety measure
       nextAudioRef.current.volume = 0;
@@ -1269,12 +1292,12 @@ export const AudioPlayerProvider: React.FC<AudioPlayerProviderProps> = ({ childr
       // Now set the element volume to 1 and let Web Audio control gain
       nextAudioRef.current.volume = 1;
 
-      // Give a tiny moment for audio to stabilize
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      // Give a moment for audio to stabilize and prevent clicks
+      await new Promise((resolve) => setTimeout(resolve, 100));
 
       console.log('🎧 DJ MIND: Next track playing silently, beginning smooth crossfade...');
 
-      // Smooth crossfade using reliable linear automation
+      // Smooth crossfade using reliable automation
       const fadeTime = currentState.crossfadeDuration;
 
       // Schedule automated transition effects if we have a plan
@@ -1349,25 +1372,35 @@ export const AudioPlayerProvider: React.FC<AudioPlayerProviderProps> = ({ childr
         endTime: (now + fadeTime).toFixed(3),
       });
 
-      // Schedule smooth crossfade
-      const fadeEndTime = now + fadeTime;
+      // Schedule smooth crossfade with better timing
+      const fadeStartTime = now + 0.1; // Small delay to ensure stability
+      const fadeEndTime = fadeStartTime + fadeTime;
 
-      // Set current value explicitly before scheduling
-      currentGainRef.current.gain.setValueAtTime(currentVolume, now);
-      nextGainRef.current.gain.setValueAtTime(0.001, now); // Start from tiny value for exponential
+      // Set current values at fade start time
+      currentGainRef.current.gain.setValueAtTime(actualCurrentGain, fadeStartTime);
+      nextGainRef.current.gain.setValueAtTime(0.0001, fadeStartTime);
 
-      // Use linear fade out for current track (smoother)
-      currentGainRef.current.gain.linearRampToValueAtTime(0.001, fadeEndTime);
+      // Use setTargetAtTime for smoother, more natural curves
+      // Time constant = duration / 5 for a good curve shape
+      const timeConstant = fadeTime / 5;
+      
+      // Fade out current track with exponential-like curve
+      currentGainRef.current.gain.setTargetAtTime(0.0001, fadeStartTime, timeConstant);
+      
+      // Fade in next track with exponential-like curve
+      nextGainRef.current.gain.setTargetAtTime(currentVolume, fadeStartTime, timeConstant);
 
-      // Use linear fade in for next track (avoids exponential issues)
+      // Add final linear ramp to ensure we reach exact values
+      currentGainRef.current.gain.linearRampToValueAtTime(0.0001, fadeEndTime);
       nextGainRef.current.gain.linearRampToValueAtTime(currentVolume, fadeEndTime);
 
-      console.log('🎧 DJ MIND: ✅ Linear crossfade automation scheduled', {
-        currentStart: currentVolume,
-        currentEnd: 0.001,
-        nextStart: 0.001,
+      console.log('🎧 DJ MIND: ✅ Smooth crossfade automation scheduled', {
+        currentStart: actualCurrentGain,
+        currentEnd: 0.0001,
+        nextStart: 0.0001,
         nextEnd: currentVolume,
         duration: fadeTime,
+        timeConstant: timeConstant.toFixed(2),
       });
 
       // Simple completion timer based on crossfade duration
@@ -1475,9 +1508,8 @@ export const AudioPlayerProvider: React.FC<AudioPlayerProviderProps> = ({ childr
       queuePosition: `${getNextTrackIndex() + 1}/${currentState.queue.length}`,
     });
 
-    // Stop current track
-    audioRef.current.pause();
-    console.log('🎧 DJ MIND: Previous track stopped');
+    // Don't pause - let the crossfade handle the transition smoothly
+    console.log('🎧 DJ MIND: Swapping audio elements seamlessly');
 
     // Store references for swapping
     const currentAudio = audioRef.current;
@@ -2284,6 +2316,10 @@ export const AudioPlayerProvider: React.FC<AudioPlayerProviderProps> = ({ childr
     console.log('🎧 DJ MIND: Jumped to hot cue', { name: cue.name, time: cue.time });
   };
 
+  // Track active effects to prevent overlapping
+  const activeEffectsRef = useRef<Set<string>>(new Set());
+  const effectTimeoutsRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
+
   const applyTransitionEffect = (effect: TransitionEffect) => {
     if (!audioContextRef.current) {
       console.warn('🎧 DJ MIND: No audio context available for effects');
@@ -2293,27 +2329,25 @@ export const AudioPlayerProvider: React.FC<AudioPlayerProviderProps> = ({ childr
     const context = audioContextRef.current;
     const now = context.currentTime;
 
+    // Create unique effect ID
+    const effectId = `${effect.type}_${Date.now()}`;
+
+    // Check if this effect type is already active
+    if (activeEffectsRef.current.has(effect.type)) {
+      console.log(`🎧 DJ MIND: ${effect.type} effect already active, skipping`);
+      return;
+    }
+
+    // Mark effect as active
+    activeEffectsRef.current.add(effect.type);
+
     // Ensure effects chain exists
     if (!filterRef.current || !delayRef.current) {
       createEffectsChain();
     }
 
-    // Connect effects to audio chain if not connected
-    if (currentSourceRef.current && currentGainRef.current && filterRef.current) {
-      try {
-        // Disconnect current gain from compressor
-        currentGainRef.current.disconnect();
-
-        // Connect through effects chain: source -> gain -> filter -> delay -> compressor -> destination
-        currentGainRef.current.connect(filterRef.current);
-        filterRef.current.connect(delayRef.current!);
-        delayRef.current!.connect(currentCompressorRef.current!);
-
-        console.log('🎧 DJ MIND: Effects chain connected');
-      } catch (e) {
-        console.warn('🎧 DJ MIND: Effects already connected');
-      }
-    }
+    // Effects should already be connected in the chain
+    // No need to reconnect on every effect application
 
     setState((prev) => ({
       ...prev,
@@ -2324,26 +2358,49 @@ export const AudioPlayerProvider: React.FC<AudioPlayerProviderProps> = ({ childr
       case 'filter':
         if (!filterRef.current) break;
 
-        // Sweep filter during transition
-        const startFreq = effect.intensity > 0.5 ? 20000 : 200; // High-pass or low-pass
-        const endFreq = effect.intensity > 0.5 ? 200 : 20000;
+        // Always use lowpass for smoother transitions
+        filterRef.current.type = 'lowpass';
+        
+        // Gentle Q values (1-3 instead of 0-10)
+        const qValue = 1 + (effect.intensity * 2);
+        filterRef.current.Q.cancelScheduledValues(now);
+        filterRef.current.Q.setValueAtTime(qValue, now);
 
-        filterRef.current.type = effect.intensity > 0.5 ? 'highpass' : 'lowpass';
-        filterRef.current.Q.setValueAtTime(effect.intensity * 10, now); // Add resonance
+        // Sweep from high to low for subtle effect
+        const startFreq = 15000;
+        const endFreq = 200 + (effect.intensity * 1000); // 200-700 Hz based on intensity
+
         filterRef.current.frequency.cancelScheduledValues(now);
         filterRef.current.frequency.setValueAtTime(startFreq, now);
-        filterRef.current.frequency.exponentialRampToValueAtTime(endFreq, now + effect.duration);
+        
+        // Use exponential ramp for smoother sweeps
+        filterRef.current.frequency.exponentialRampToValueAtTime(
+          endFreq, 
+          now + effect.duration * 0.8
+        );
 
-        // Reset filter after effect
-        setTimeout(() => {
-          if (filterRef.current) {
-            filterRef.current.type = 'lowpass'; // Reset to lowpass
-            filterRef.current.frequency.cancelScheduledValues(context.currentTime);
-            filterRef.current.frequency.setValueAtTime(20000, context.currentTime);
-            filterRef.current.Q.cancelScheduledValues(context.currentTime);
-            filterRef.current.Q.setValueAtTime(1, context.currentTime);
+        // Clean up after effect
+        const cleanup = setTimeout(() => {
+          if (filterRef.current && audioContextRef.current) {
+            const cleanupTime = audioContextRef.current.currentTime;
+            // Smooth return to neutral
+            filterRef.current.frequency.cancelScheduledValues(cleanupTime);
+            filterRef.current.frequency.setValueAtTime(
+              filterRef.current.frequency.value, 
+              cleanupTime
+            );
+            filterRef.current.frequency.exponentialRampToValueAtTime(
+              20000, 
+              cleanupTime + 1
+            );
+            filterRef.current.Q.exponentialRampToValueAtTime(1, cleanupTime + 1);
           }
+          // Remove from active effects
+          activeEffectsRef.current.delete('filter');
         }, effect.duration * 1000);
+
+        // Track timeout for cleanup
+        effectTimeoutsRef.current.set(effectId, cleanup);
 
         console.log('🎧 DJ MIND: Filter sweep applied', {
           type: filterRef.current.type,
@@ -2363,15 +2420,25 @@ export const AudioPlayerProvider: React.FC<AudioPlayerProviderProps> = ({ childr
           delayTime = 60 / state.sourceBpm / 2; // 1/8 note
         }
 
-        // Create feedback loop for echo
-        const feedbackGain = context.createGain();
-        const wetGain = context.createGain();
+        // Create feedback loop for echo (only if not exists)
+        let feedbackGain = context.createGain();
+        let wetGain = context.createGain();
 
-        // Set delay time and feedback
+        // Much gentler feedback values
+        const feedbackAmount = effect.intensity * 0.3; // Max 0.3 feedback
+        const wetAmount = effect.intensity * 0.25; // Max 0.25 wet signal
+
+        // Set delay time
         delayRef.current.delayTime.cancelScheduledValues(now);
         delayRef.current.delayTime.setValueAtTime(delayTime, now);
-        feedbackGain.gain.setValueAtTime(effect.intensity * 0.6, now);
-        wetGain.gain.setValueAtTime(effect.intensity * 0.5, now);
+        
+        // Set initial gains
+        feedbackGain.gain.setValueAtTime(0, now);
+        wetGain.gain.setValueAtTime(0, now);
+        
+        // Fade in the effect smoothly
+        feedbackGain.gain.linearRampToValueAtTime(feedbackAmount, now + 0.1);
+        wetGain.gain.linearRampToValueAtTime(wetAmount, now + 0.1);
 
         // Connect feedback loop: delay -> feedback -> delay
         try {
@@ -2383,30 +2450,34 @@ export const AudioPlayerProvider: React.FC<AudioPlayerProviderProps> = ({ childr
           console.warn('🎧 DJ MIND: Echo connections exist');
         }
 
-        // Fade out echo over time
-        const fadeOutTime = now + effect.duration * 0.8;
-        feedbackGain.gain.setValueAtTime(effect.intensity * 0.6, fadeOutTime);
-        feedbackGain.gain.exponentialRampToValueAtTime(0.001, fadeOutTime + 1);
-        wetGain.gain.setValueAtTime(effect.intensity * 0.5, fadeOutTime);
-        wetGain.gain.exponentialRampToValueAtTime(0.001, fadeOutTime + 1);
+        // Fade out echo smoothly
+        const fadeOutTime = now + effect.duration * 0.7;
+        feedbackGain.gain.setValueAtTime(feedbackAmount, fadeOutTime);
+        wetGain.gain.setValueAtTime(wetAmount, fadeOutTime);
+        
+        // Smooth fade to zero
+        feedbackGain.gain.linearRampToValueAtTime(0, fadeOutTime + 1);
+        wetGain.gain.linearRampToValueAtTime(0, fadeOutTime + 1);
 
-        // Clean up connections after effect
-        setTimeout(
-          () => {
-            try {
-              feedbackGain.disconnect();
-              wetGain.disconnect();
-              if (delayRef.current) {
-                delayRef.current.disconnect();
-                delayRef.current.connect(currentCompressorRef.current!);
-                delayRef.current.delayTime.setValueAtTime(0, context.currentTime);
-              }
-            } catch (e) {
-              // Ignore disconnection errors
+        // Clean up after effect
+        const echoCleanup = setTimeout(() => {
+          try {
+            feedbackGain.disconnect();
+            wetGain.disconnect();
+            if (delayRef.current) {
+              delayRef.current.disconnect();
+              delayRef.current.connect(currentCompressorRef.current!);
+              delayRef.current.delayTime.setValueAtTime(0, context.currentTime);
             }
-          },
-          (effect.duration + 1) * 1000
-        );
+          } catch (e) {
+            // Ignore disconnection errors
+          }
+          // Remove from active effects
+          activeEffectsRef.current.delete('echo');
+        }, (effect.duration + 1) * 1000);
+
+        // Track timeout for cleanup
+        effectTimeoutsRef.current.set(effectId, echoCleanup);
 
         console.log('🎧 DJ MIND: Echo effect applied', {
           delayTime: `${delayTime.toFixed(3)}s`,
@@ -2438,112 +2509,85 @@ export const AudioPlayerProvider: React.FC<AudioPlayerProviderProps> = ({ childr
         break;
 
       case 'scratch':
-        // Scratch effect using gain modulation instead of playback rate to avoid permanent issues
-        if (!audioRef.current || !filterRef.current || !currentGainRef.current) break;
+        // Simplified scratch effect using subtle gain modulation
+        if (!filterRef.current || !currentGainRef.current) break;
 
         console.log('🎧 DJ MIND: 🎚️ Scratch effect triggered');
 
         // Store original gain
         const originalGain = state.volume;
 
-        // Apply filter for scratch sound
+        // Apply gentle highpass filter for scratch texture
         filterRef.current.type = 'highpass';
         filterRef.current.Q.cancelScheduledValues(now);
-        filterRef.current.Q.setValueAtTime(15, now);
+        filterRef.current.Q.setValueAtTime(3, now); // Much lower Q
         filterRef.current.frequency.cancelScheduledValues(now);
+        filterRef.current.frequency.setValueAtTime(800, now);
+        
+        // Sweep the filter up gently
+        filterRef.current.frequency.linearRampToValueAtTime(
+          1500, 
+          now + effect.duration * 0.5
+        );
 
-        // Scratch pattern using gain cuts and filter sweeps (safer than playback rate)
-        const scratchSteps = [
-          { gain: 0.1, freq: 800, duration: 0.05 },
-          { gain: 1.0, freq: 2000, duration: 0.05 },
-          { gain: 0.0, freq: 500, duration: 0.05 },
-          { gain: 0.8, freq: 1500, duration: 0.05 },
-          { gain: 0.2, freq: 1000, duration: 0.05 },
-          { gain: 1.0, freq: 3000, duration: 0.05 },
-          { gain: 0.0, freq: 800, duration: 0.05 },
-          { gain: 0.9, freq: 2500, duration: 0.05 },
+        // Simple gain pattern (fewer, gentler cuts)
+        const scratchPattern = [
+          { time: 0, gain: 1.0 },
+          { time: 0.1, gain: 0.7 },
+          { time: 0.2, gain: 1.0 },
+          { time: 0.3, gain: 0.8 },
+          { time: 0.4, gain: 1.0 },
         ];
 
-        let scratchTime = now;
-
-        // Schedule scratch pattern
-        scratchSteps.forEach((step) => {
+        // Apply gain pattern with gentle intensity
+        scratchPattern.forEach((step) => {
+          const stepGain = originalGain * (1 - (1 - step.gain) * effect.intensity * 0.5);
           currentGainRef.current!.gain.setValueAtTime(
-            step.gain * originalGain * effect.intensity,
-            scratchTime
+            stepGain,
+            now + step.time
           );
-          filterRef.current!.frequency.setValueAtTime(step.freq, scratchTime);
-          scratchTime += step.duration;
         });
 
-        // Ensure we return to original volume
-        currentGainRef.current.gain.setValueAtTime(originalGain, scratchTime);
+        // Return to original volume
+        currentGainRef.current.gain.setValueAtTime(originalGain, now + 0.5);
 
-        // Reset filter after scratch completes
-        const totalScratchTime = scratchSteps.reduce((sum, step) => sum + step.duration, 0);
-        setTimeout(() => {
-          if (filterRef.current && currentGainRef.current) {
-            // Reset filter
-            filterRef.current.type = 'lowpass';
-            filterRef.current.frequency.cancelScheduledValues(context.currentTime);
-            filterRef.current.frequency.setValueAtTime(20000, context.currentTime);
-            filterRef.current.Q.cancelScheduledValues(context.currentTime);
-            filterRef.current.Q.setValueAtTime(1, context.currentTime);
+        // Clean up after effect
+        const scratchCleanup = setTimeout(() => {
+          if (filterRef.current && currentGainRef.current && audioContextRef.current) {
+            const cleanupTime = audioContextRef.current.currentTime;
+            // Smooth filter reset
+            filterRef.current.frequency.linearRampToValueAtTime(20000, cleanupTime + 0.5);
+            filterRef.current.Q.linearRampToValueAtTime(1, cleanupTime + 0.5);
+            
+            // After transition, reset to lowpass
+            setTimeout(() => {
+              if (filterRef.current) {
+                filterRef.current.type = 'lowpass';
+              }
+            }, 500);
 
-            // Ensure gain is back to normal
-            currentGainRef.current.gain.cancelScheduledValues(context.currentTime);
-            currentGainRef.current.gain.setValueAtTime(state.volume, context.currentTime);
+            // Ensure gain is stable
+            currentGainRef.current.gain.cancelScheduledValues(cleanupTime);
+            currentGainRef.current.gain.setValueAtTime(state.volume, cleanupTime);
           }
-        }, totalScratchTime * 1000);
+          // Remove from active effects
+          activeEffectsRef.current.delete('scratch');
+        }, effect.duration * 1000);
+
+        // Track timeout for cleanup
+        effectTimeoutsRef.current.set(effectId, scratchCleanup);
 
         console.log('🎧 DJ MIND: Scratch pattern applied', {
           intensity: effect.intensity,
-          duration: totalScratchTime,
-          steps: scratchSteps.length,
+          duration: effect.duration,
         });
         break;
     }
 
-    // Remove effect after duration and clean up
+    // Remove effect from state after duration
     setTimeout(() => {
       setState((prev) => {
         const newEffects = prev.currentEffects.filter((e) => e !== effect);
-
-        // If this was the last effect, reset the audio chain
-        if (newEffects.length === 0 && currentGainRef.current && currentCompressorRef.current) {
-          try {
-            // Disconnect everything
-            currentGainRef.current.disconnect();
-            if (filterRef.current) {
-              filterRef.current.disconnect();
-              // Reset filter to neutral state
-              filterRef.current.type = 'lowpass';
-              filterRef.current.frequency.cancelScheduledValues(context.currentTime);
-              filterRef.current.frequency.setValueAtTime(20000, context.currentTime);
-              filterRef.current.Q.cancelScheduledValues(context.currentTime);
-              filterRef.current.Q.setValueAtTime(1, context.currentTime);
-            }
-            if (delayRef.current) {
-              delayRef.current.disconnect();
-              delayRef.current.delayTime.cancelScheduledValues(context.currentTime);
-              delayRef.current.delayTime.setValueAtTime(0, context.currentTime);
-            }
-
-            // Reconnect the original chain: gain -> compressor -> destination
-            currentGainRef.current.connect(currentCompressorRef.current);
-
-            // Also reconnect filter and delay in bypass mode
-            if (filterRef.current && delayRef.current) {
-              filterRef.current.connect(delayRef.current);
-              delayRef.current.connect(currentCompressorRef.current);
-            }
-
-            console.log('🎧 DJ MIND: Effects chain reset, audio restored');
-          } catch (e) {
-            console.warn('🎧 DJ MIND: Error resetting audio chain', e);
-          }
-        }
-
         return { ...prev, currentEffects: newEffects };
       });
     }, effect.duration * 1000);
@@ -2800,22 +2844,22 @@ export const AudioPlayerProvider: React.FC<AudioPlayerProviderProps> = ({ childr
       // Large BPM difference - use dramatic filter sweep
       transitionEffect = {
         type: 'filter',
-        intensity: 0.8,
-        duration: currentState.crossfadeDuration * 0.8,
+        intensity: 0.9,
+        duration: Math.max(currentState.crossfadeDuration * 0.8, 6),
       };
     } else if (bpmDiff > 10) {
       // Medium BPM difference - use echo effect
       transitionEffect = {
         type: 'echo',
-        intensity: 0.6,
-        duration: currentState.crossfadeDuration * 0.6,
+        intensity: 0.8,
+        duration: Math.max(currentState.crossfadeDuration * 0.6, 4),
       };
     } else {
       // Similar BPM - use subtle loop or scratch
       transitionEffect = {
         type: Math.random() > 0.5 ? 'loop' : 'scratch',
-        intensity: 0.4,
-        duration: currentState.crossfadeDuration * 0.3,
+        intensity: 0.7,
+        duration: Math.max(currentState.crossfadeDuration * 0.3, 3),
       };
     }
 
@@ -2853,7 +2897,7 @@ export const AudioPlayerProvider: React.FC<AudioPlayerProviderProps> = ({ childr
       applyTransitionEffect({
         type: 'scratch',
         intensity,
-        duration: 1.0,
+        duration: 2.0,
       }),
     [applyTransitionEffect]
   );
@@ -2863,7 +2907,7 @@ export const AudioPlayerProvider: React.FC<AudioPlayerProviderProps> = ({ childr
       applyTransitionEffect({
         type: 'echo',
         intensity,
-        duration: 2.0,
+        duration: 4.0,
       }),
     [applyTransitionEffect]
   );
@@ -2873,7 +2917,7 @@ export const AudioPlayerProvider: React.FC<AudioPlayerProviderProps> = ({ childr
       applyTransitionEffect({
         type: 'filter',
         intensity,
-        duration: 3.0,
+        duration: 6.0,
       }),
     [applyTransitionEffect]
   );

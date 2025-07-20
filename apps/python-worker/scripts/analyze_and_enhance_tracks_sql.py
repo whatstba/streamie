@@ -25,6 +25,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils.id3_reader import read_audio_metadata
 from utils.librosa import analyze_track
 from utils.essentia_utils import analyze_mood
+from utils.enhanced_analyzer import EnhancedTrackAnalyzer
 from main import MUSIC_DIR
 
 # Audio analysis libraries
@@ -77,6 +78,10 @@ class TrackDatabase:
                 -- Audio analysis
                 bpm REAL,
                 beat_times TEXT,  -- JSON array of beat times
+                key TEXT,
+                key_scale TEXT,
+                key_confidence REAL,
+                camelot_key TEXT
                 
                 -- Mood analysis (Essentia)
                 mood_acoustic REAL DEFAULT 0.0,
@@ -110,6 +115,21 @@ class TrackDatabase:
         cursor.execute(
             "CREATE INDEX IF NOT EXISTS idx_mood_label ON tracks(mood_label)"
         )
+
+        # Check if key columns exist, add them if not
+        cursor.execute("PRAGMA table_info(tracks)")
+        columns = [col[1] for col in cursor.fetchall()]
+
+        if "key" not in columns:
+            print("Adding key columns to database...")
+            cursor.execute("ALTER TABLE tracks ADD COLUMN key TEXT")
+            cursor.execute("ALTER TABLE tracks ADD COLUMN key_scale TEXT")
+            cursor.execute("ALTER TABLE tracks ADD COLUMN key_confidence REAL")
+            cursor.execute("ALTER TABLE tracks ADD COLUMN camelot_key TEXT")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_key ON tracks(key)")
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_camelot ON tracks(camelot_key)"
+            )
 
         self.connection.commit()
         print(f"✅ Database initialized at {self.db_path}")
@@ -196,6 +216,10 @@ class TrackDatabase:
             # Analysis
             "bpm": analysis.get("bpm"),
             "beat_times": beat_times_json,
+            "key": analysis.get("key"),
+            "key_scale": analysis.get("key_scale"),
+            "key_confidence": analysis.get("key_confidence"),
+            "camelot_key": analysis.get("camelot_key"),
             # Mood
             "mood_acoustic": mood.get("mood_acoustic", 0.0),
             "mood_aggressive": mood.get("mood_aggressive", 0.0),
@@ -420,6 +444,22 @@ class TrackAnalyzer:
             print("  Analyzing audio...")
             analysis = analyze_track(file_path)
 
+            # Analyze key
+            print("  Analyzing key...")
+            try:
+                key_analyzer = EnhancedTrackAnalyzer(self.db.db_path)
+                key_info = key_analyzer._detect_key(file_path)
+                analysis["key"] = key_info.get("key")
+                analysis["key_scale"] = key_info.get("scale")
+                analysis["key_confidence"] = key_info.get("strength")
+                analysis["camelot_key"] = key_info.get("camelot")
+            except Exception as e:
+                print(f"  Warning: Key analysis failed: {e}")
+                analysis["key"] = "Unknown"
+                analysis["key_scale"] = "Unknown"
+                analysis["key_confidence"] = 0.0
+                analysis["camelot_key"] = None
+
             # Analyze mood
             print("  Analyzing mood...")
             try:
@@ -440,11 +480,17 @@ class TrackAnalyzer:
             # Save to database
             self.db.save_track(file_path, metadata, analysis, mood, enhanced)
 
+            key_str = (
+                f"{analysis.get('key', 'Unknown')} {analysis.get('key_scale', '')}"
+                if analysis.get("key")
+                else "Unknown"
+            )
+            camelot = analysis.get("camelot_key", "N/A")
             print(
                 f"  ✅ BPM: {analysis.get('bpm', 0):.1f}, "
+                f"Key: {key_str} ({camelot}), "
                 f"Energy: {enhanced.get('energy_level', 0):.2f}, "
-                f"Dance: {enhanced.get('danceability', 0):.2f}, "
-                f"Mood: {mood.get(max(mood, key=mood.get) if mood else 'unknown', 'unknown')}"
+                f"Dance: {enhanced.get('danceability', 0):.2f}"
             )
 
             return True

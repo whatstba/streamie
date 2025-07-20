@@ -2,10 +2,8 @@
 
 import React from 'react';
 import {
-  HomeIcon,
   MicrophoneIcon,
   SparklesIcon,
-  HeartIcon,
   PlayIcon,
   PauseIcon,
   ClockIcon,
@@ -81,16 +79,6 @@ const Sidebar = () => {
         )}
       </div> */}
 
-      <nav className="space-y-4">
-        <a href="#" className="flex items-center gap-3 text-gray-300 hover:text-white transition">
-          <HomeIcon className="h-6 w-6" />
-          <span>Home</span>
-        </a>
-        <a href="#" className="flex items-center gap-3 text-gray-300 hover:text-white transition">
-          <HeartIcon className="h-6 w-6" />
-          <span>Liked Songs</span>
-        </a>
-      </nav>
 
       {/* Now Playing Section */}
       {currentTrack && (
