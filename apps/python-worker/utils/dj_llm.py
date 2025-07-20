@@ -49,8 +49,11 @@ class TrackEvaluation(BaseModel):
 
 class TransitionEffect(BaseModel):
     """Individual transition effect with required fields"""
+
     type: str = Field(description="Effect type: filter, echo, scratch")
-    start_at: float = Field(description="Start time in seconds from transition start", ge=0)
+    start_at: float = Field(
+        description="Start time in seconds from transition start", ge=0
+    )
     duration: float = Field(description="Effect duration in seconds", ge=0.1)
     intensity: float = Field(description="Effect intensity 0-1", ge=0, le=1)
 
@@ -324,7 +327,9 @@ DJ Style: {dj_style}""",
                 compatibility_score=0.7,
                 transition_type="smooth_blend",
                 effects=[
-                    TransitionEffect(type="filter", start_at=0, duration=8, intensity=0.7)
+                    TransitionEffect(
+                        type="filter", start_at=0, duration=8, intensity=0.7
+                    )
                 ],
                 crossfade_duration=8.0,
                 cue_points={"outro_start": 0, "intro_start": 0},
@@ -409,7 +414,7 @@ Additional Context: {context}""",
             json_match = re.search(r"\{[\s\S]*\}", result.content)
             if json_match:
                 effect_plan = json.loads(json_match.group())
-                
+
                 # Validate and ensure all effects have required fields
                 if "effects" in effect_plan:
                     for i, effect in enumerate(effect_plan["effects"]):
@@ -422,12 +427,16 @@ Additional Context: {context}""",
                             effect["duration"] = 4.0
                         if "intensity" not in effect:
                             effect["intensity"] = 0.5
-                            
+
                         # Validate ranges
-                        effect["intensity"] = max(0, min(1, float(effect.get("intensity", 0.5))))
+                        effect["intensity"] = max(
+                            0, min(1, float(effect.get("intensity", 0.5)))
+                        )
                         effect["start_at"] = max(0, float(effect.get("start_at", 0)))
-                        effect["duration"] = max(0.1, float(effect.get("duration", 4.0)))
-                
+                        effect["duration"] = max(
+                            0.1, float(effect.get("duration", 4.0))
+                        )
+
                 logger.info(f"🎛️ AI Effect Design: {effect_plan}")
                 return effect_plan
             else:
