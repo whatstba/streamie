@@ -11,6 +11,7 @@ from services.analysis_service import AnalysisService
 from services.deck_manager import DeckManager
 from services.mixer_manager import MixerManager
 from services.transition_executor import TransitionExecutor
+from services.effect_manager import EffectManager
 from agents.mix_coordinator_agent import MixCoordinatorAgent
 from models.database import init_db
 
@@ -24,6 +25,7 @@ class ServiceManager:
     _analysis_service: Optional[AnalysisService] = None
     _deck_manager: Optional[DeckManager] = None
     _mixer_manager: Optional[MixerManager] = None
+    _effect_manager: Optional[EffectManager] = None
     _mix_coordinator: Optional[MixCoordinatorAgent] = None
     _transition_executor: Optional[TransitionExecutor] = None
     _engine = None
@@ -77,7 +79,11 @@ class ServiceManager:
             self._deck_manager.analysis_service = self._analysis_service
             logger.info("✅ Deck and mixer managers initialized")
 
-            # 5. Initialize mix coordinator
+            # 5. Initialize effect manager
+            self._effect_manager = EffectManager()
+            logger.info("✅ Effect manager initialized")
+
+            # 6. Initialize mix coordinator
             self._mix_coordinator = MixCoordinatorAgent(
                 deck_manager=self._deck_manager,
                 mixer_manager=self._mixer_manager,
@@ -85,9 +91,11 @@ class ServiceManager:
             )
             logger.info("✅ Mix coordinator initialized")
 
-            # 6. Initialize transition executor
+            # 7. Initialize transition executor with effect manager
             self._transition_executor = TransitionExecutor(
-                deck_manager=self._deck_manager, mixer_manager=self._mixer_manager
+                deck_manager=self._deck_manager,
+                mixer_manager=self._mixer_manager,
+                effect_manager=self._effect_manager,
             )
             logger.info("✅ Transition executor initialized")
 
@@ -124,6 +132,11 @@ class ServiceManager:
         await self.initialize_all_services()
         return self._transition_executor
 
+    async def get_effect_manager(self) -> EffectManager:
+        """Get or create the singleton EffectManager instance"""
+        await self.initialize_all_services()
+        return self._effect_manager
+
     async def shutdown(self):
         """Shutdown all managed services"""
         logger.info("🛑 Shutting down services...")
@@ -131,6 +144,12 @@ class ServiceManager:
         # Cancel any active transitions first
         if self._transition_executor is not None:
             await self._transition_executor.cancel_transition()
+
+        # Shutdown effect manager
+        if self._effect_manager is not None:
+            await self._effect_manager.shutdown()
+            self._effect_manager = None
+            logger.info("✅ Effect manager stopped")
 
         if self._analysis_service is not None:
             await self._analysis_service.stop()

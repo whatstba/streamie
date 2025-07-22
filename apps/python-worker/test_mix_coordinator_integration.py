@@ -5,6 +5,11 @@ import json
 import time
 import asyncio
 import websockets
+import pytest
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 BASE_URL = "http://localhost:8000"
 
@@ -199,6 +204,7 @@ def test_transition_execution():
     print("=" * 50)
 
 
+@pytest.mark.asyncio
 async def test_websocket_streaming():
     """Test WebSocket streaming for mix updates"""
     print("\n" + "=" * 50)

@@ -51,6 +51,9 @@ from routers.analysis_router import router as analysis_router
 # Import the mix router
 from routers.mix_router import router as mix_router
 
+# Import the effect router
+from routers.effect_router import router as effect_router
+
 # Import service manager for cleanup
 from services.service_manager import service_manager
 
@@ -93,6 +96,9 @@ app.include_router(analysis_router)
 
 # Include the mix router
 app.include_router(mix_router)
+
+# Include the effect router
+app.include_router(effect_router)
 
 
 class SeratoHotCue(BaseModel):

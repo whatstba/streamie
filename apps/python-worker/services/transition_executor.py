@@ -4,7 +4,7 @@ Transition Executor Service - Executes mix plans with precise timing and coordin
 
 import asyncio
 import logging
-from typing import Dict, Optional, Callable, Any
+from typing import Dict, Optional, Callable, Any, Set
 from datetime import datetime, timedelta
 import numpy as np
 
@@ -33,12 +33,19 @@ logger.addHandler(console_handler)
 class TransitionExecutor:
     """Executes mix transitions with precise timing and smooth parameter changes."""
 
-    def __init__(self, deck_manager: DeckManager, mixer_manager: MixerManager):
+    def __init__(
+        self,
+        deck_manager: DeckManager,
+        mixer_manager: MixerManager,
+        effect_manager=None,
+    ):
         self.deck_manager = deck_manager
         self.mixer_manager = mixer_manager
+        self.effect_manager = effect_manager
         self.active_transition: Optional[TransitionState] = None
         self._transition_task: Optional[asyncio.Task] = None
         self._update_callbacks: list[Callable] = []
+        self._active_effect_ids: Set[str] = set()
 
     def add_update_callback(self, callback: Callable[[TransitionState], None]):
         """Add a callback for transition state updates."""
@@ -220,7 +227,11 @@ class TransitionExecutor:
         )
 
         # Clear any effects
-        # Note: This will be implemented in Phase 6
+        if self.effect_manager and self._active_effect_ids:
+            logger.info(f"🎚️ Cleaning up {len(self._active_effect_ids)} effects")
+            for effect_id in list(self._active_effect_ids):
+                await self.effect_manager.stop_effect(effect_id)
+            self._active_effect_ids.clear()
 
         logger.info(
             f"🎚️ Transition complete: {mix_decision.source_deck} → {mix_decision.target_deck}"
@@ -254,10 +265,41 @@ class TransitionExecutor:
                 )
 
     async def _start_effect(self, effect: TransitionEffect, mix_decision: MixDecision):
-        """Start an effect (placeholder for Phase 6)."""
+        """Start an effect using the EffectManager."""
         logger.info(f"🎚️ Starting effect: {effect.type} at intensity {effect.intensity}")
-        # Effect implementation will come in Phase 6
-        # For now, just log
+
+        if self.effect_manager:
+            # Determine which deck(s) to apply effect to
+            # For most transitions, effects are applied to the source deck
+            deck_id = mix_decision.source_deck
+
+            # Some effects might be applied to the target deck
+            if (
+                effect.type in ["reverb", "delay"]
+                and effect.start_at > mix_decision.duration * 0.5
+            ):
+                deck_id = mix_decision.target_deck
+
+            try:
+                # Apply effect via EffectManager
+                effect_id = await self.effect_manager.apply_effect(
+                    deck_id=deck_id,
+                    effect=effect,
+                    transition_id=self.active_transition.mix_decision.source_deck
+                    + "_to_"
+                    + self.active_transition.mix_decision.target_deck,
+                )
+
+                # Track effect ID for cleanup
+                self._active_effect_ids.add(effect_id)
+
+                logger.info(
+                    f"🎚️ Effect {effect.type} started on deck {deck_id} (ID: {effect_id[:8]}...)"
+                )
+            except Exception as e:
+                logger.error(f"🎚️ Failed to start effect {effect.type}: {e}")
+        else:
+            logger.warning("🎚️ EffectManager not available, effect not started")
 
     async def _notify_update(self):
         """Notify callbacks of state update."""

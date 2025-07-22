@@ -3,8 +3,14 @@
 import asyncio
 import httpx
 import json
+import pytest
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 
+@pytest.mark.asyncio
 async def test_endpoints():
     async with httpx.AsyncClient() as client:
         base_url = "http://localhost:8000"
