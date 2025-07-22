@@ -34,6 +34,9 @@ import json
 # Import the AI router - temporarily disabled
 # from routers.ai_router import router as ai_router
 
+# Import the deck router
+from routers.deck_router import router as deck_router
+
 # Create FastAPI app instance
 app = FastAPI(title="AI DJ Backend")
 
@@ -48,6 +51,9 @@ app.add_middleware(
 
 # Include the AI router - temporarily disabled
 # app.include_router(ai_router)
+
+# Include the deck router
+app.include_router(deck_router)
 
 
 class SeratoHotCue(BaseModel):

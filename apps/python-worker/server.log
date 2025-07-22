@@ -1,0 +1,509 @@
+🎧 [09:19:02] INFO: 🚀 Initializing DJAgent with model: gpt-4.1-mini
+🎧 [09:19:02] INFO: ✅ DJAgent initialized successfully
+INFO:     Will watch for changes in these directories: ['/Users/lynscott/Projects/streamie/apps/python-worker']
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process [11782] using WatchFiles
+🎧 [09:19:04] INFO: 🚀 Initializing DJAgent with model: gpt-4.1-mini
+🎧 [09:19:04] INFO: ✅ DJAgent initialized successfully
+INFO:     Started server process [11832]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+✅ Music library ready - tracks available, analysis on manual request only
+INFO:     127.0.0.1:50883 - "GET /api/decks/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50900 - "GET /api/decks/A HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50918 - "GET /api/decks/mixer/state HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50971 - "POST /api/decks/A/load HTTP/1.1" 500 Internal Server Error
+ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/uvicorn/protocols/http/httptools_impl.py", line 426, in run_asgi
+    result = await app(  # type: ignore[func-returns-value]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/uvicorn/middleware/proxy_headers.py", line 84, in __call__
+    return await self.app(scope, receive, send)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/fastapi/applications.py", line 289, in __call__
+    await super().__call__(scope, receive, send)
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/starlette/applications.py", line 122, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/starlette/middleware/errors.py", line 184, in __call__
+    raise exc
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/starlette/middleware/errors.py", line 162, in __call__
+    await self.app(scope, receive, _send)
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/starlette/middleware/cors.py", line 83, in __call__
+    await self.app(scope, receive, send)
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/starlette/middleware/exceptions.py", line 79, in __call__
+    raise exc
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/starlette/middleware/exceptions.py", line 68, in __call__
+    await self.app(scope, receive, sender)
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/fastapi/middleware/asyncexitstack.py", line 20, in __call__
+    raise e
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/fastapi/middleware/asyncexitstack.py", line 17, in __call__
+    await self.app(scope, receive, send)
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/starlette/routing.py", line 718, in __call__
+    await route.handle(scope, receive, send)
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/starlette/routing.py", line 276, in handle
+    await self.app(scope, receive, send)
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/starlette/routing.py", line 66, in app
+    response = await func(request)
+               ^^^^^^^^^^^^^^^^^^^
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/fastapi/routing.py", line 291, in app
+    content = await serialize_response(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/fastapi/routing.py", line 154, in serialize_response
+    raise ResponseValidationError(
+fastapi.exceptions.ResponseValidationError
+INFO:     127.0.0.1:51023 - "POST /api/decks/A/load HTTP/1.1" 500 Internal Server Error
+ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/uvicorn/protocols/http/httptools_impl.py", line 426, in run_asgi
+    result = await app(  # type: ignore[func-returns-value]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/uvicorn/middleware/proxy_headers.py", line 84, in __call__
+    return await self.app(scope, receive, send)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/fastapi/applications.py", line 289, in __call__
+    await super().__call__(scope, receive, send)
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/starlette/applications.py", line 122, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/starlette/middleware/errors.py", line 184, in __call__
+    raise exc
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/starlette/middleware/errors.py", line 162, in __call__
+    await self.app(scope, receive, _send)
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/starlette/middleware/cors.py", line 83, in __call__
+    await self.app(scope, receive, send)
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/starlette/middleware/exceptions.py", line 79, in __call__
+    raise exc
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/starlette/middleware/exceptions.py", line 68, in __call__
+    await self.app(scope, receive, sender)
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/fastapi/middleware/asyncexitstack.py", line 20, in __call__
+    raise e
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/fastapi/middleware/asyncexitstack.py", line 17, in __call__
+    await self.app(scope, receive, send)
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/starlette/routing.py", line 718, in __call__
+    await route.handle(scope, receive, send)
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/starlette/routing.py", line 276, in handle
+    await self.app(scope, receive, send)
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/starlette/routing.py", line 66, in app
+    response = await func(request)
+               ^^^^^^^^^^^^^^^^^^^
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/fastapi/routing.py", line 291, in app
+    content = await serialize_response(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/fastapi/routing.py", line 154, in serialize_response
+    raise ResponseValidationError(
+fastapi.exceptions.ResponseValidationError
+INFO:     127.0.0.1:51057 - "POST /api/decks/A/load HTTP/1.1" 500 Internal Server Error
+ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/uvicorn/protocols/http/httptools_impl.py", line 426, in run_asgi
+    result = await app(  # type: ignore[func-returns-value]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/uvicorn/middleware/proxy_headers.py", line 84, in __call__
+    return await self.app(scope, receive, send)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/fastapi/applications.py", line 289, in __call__
+    await super().__call__(scope, receive, send)
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/starlette/applications.py", line 122, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/starlette/middleware/errors.py", line 184, in __call__
+    raise exc
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/starlette/middleware/errors.py", line 162, in __call__
+    await self.app(scope, receive, _send)
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/starlette/middleware/cors.py", line 83, in __call__
+    await self.app(scope, receive, send)
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/starlette/middleware/exceptions.py", line 79, in __call__
+    raise exc
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/starlette/middleware/exceptions.py", line 68, in __call__
+    await self.app(scope, receive, sender)
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/fastapi/middleware/asyncexitstack.py", line 20, in __call__
+    raise e
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/fastapi/middleware/asyncexitstack.py", line 17, in __call__
+    await self.app(scope, receive, send)
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/starlette/routing.py", line 718, in __call__
+    await route.handle(scope, receive, send)
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/starlette/routing.py", line 276, in handle
+    await self.app(scope, receive, send)
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/starlette/routing.py", line 66, in app
+    response = await func(request)
+               ^^^^^^^^^^^^^^^^^^^
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/fastapi/routing.py", line 291, in app
+    content = await serialize_response(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/fastapi/routing.py", line 154, in serialize_response
+    raise ResponseValidationError(
+fastapi.exceptions.ResponseValidationError
+WARNING:  WatchFiles detected changes in 'services/deck_manager.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [11832]
+🎧 [09:20:36] INFO: 🚀 Initializing DJAgent with model: gpt-4.1-mini
+🎧 [09:20:36] INFO: ✅ DJAgent initialized successfully
+INFO:     Started server process [12434]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'routers/deck_router.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [12434]
+✅ Music library ready - tracks available, analysis on manual request only
+🎧 [09:22:07] INFO: 🚀 Initializing DJAgent with model: gpt-4.1-mini
+🎧 [09:22:07] INFO: ✅ DJAgent initialized successfully
+INFO:     Started server process [12557]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+✅ Music library ready - tracks available, analysis on manual request only
+INFO:     127.0.0.1:51260 - "POST /api/decks/A/load HTTP/1.1" 500 Internal Server Error
+ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/uvicorn/protocols/http/httptools_impl.py", line 426, in run_asgi
+    result = await app(  # type: ignore[func-returns-value]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/uvicorn/middleware/proxy_headers.py", line 84, in __call__
+    return await self.app(scope, receive, send)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/fastapi/applications.py", line 289, in __call__
+    await super().__call__(scope, receive, send)
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/starlette/applications.py", line 122, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/starlette/middleware/errors.py", line 184, in __call__
+    raise exc
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/starlette/middleware/errors.py", line 162, in __call__
+    await self.app(scope, receive, _send)
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/starlette/middleware/cors.py", line 83, in __call__
+    await self.app(scope, receive, send)
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/starlette/middleware/exceptions.py", line 79, in __call__
+    raise exc
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/starlette/middleware/exceptions.py", line 68, in __call__
+    await self.app(scope, receive, sender)
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/fastapi/middleware/asyncexitstack.py", line 20, in __call__
+    raise e
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/fastapi/middleware/asyncexitstack.py", line 17, in __call__
+    await self.app(scope, receive, send)
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/starlette/routing.py", line 718, in __call__
+    await route.handle(scope, receive, send)
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/starlette/routing.py", line 276, in handle
+    await self.app(scope, receive, send)
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/starlette/routing.py", line 66, in app
+    response = await func(request)
+               ^^^^^^^^^^^^^^^^^^^
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/fastapi/routing.py", line 291, in app
+    content = await serialize_response(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/fastapi/routing.py", line 154, in serialize_response
+    raise ResponseValidationError(
+fastapi.exceptions.ResponseValidationError
+WARNING:  WatchFiles detected changes in 'tools/dj_toolset.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [12557]
+🎧 [09:23:01] INFO: 🚀 Initializing DJAgent with model: gpt-4.1-mini
+🎧 [09:23:01] INFO: ✅ DJAgent initialized successfully
+INFO:     Started server process [12839]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'services/deck_manager.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [12839]
+✅ Music library ready - tracks available, analysis on manual request only
+🎧 [09:23:08] INFO: 🚀 Initializing DJAgent with model: gpt-4.1-mini
+🎧 [09:23:08] INFO: ✅ DJAgent initialized successfully
+INFO:     Started server process [12875]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+✅ Music library ready - tracks available, analysis on manual request only
+INFO:     127.0.0.1:51419 - "POST /api/decks/A/load HTTP/1.1" 500 Internal Server Error
+ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/uvicorn/protocols/http/httptools_impl.py", line 426, in run_asgi
+    result = await app(  # type: ignore[func-returns-value]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/uvicorn/middleware/proxy_headers.py", line 84, in __call__
+    return await self.app(scope, receive, send)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/fastapi/applications.py", line 289, in __call__
+    await super().__call__(scope, receive, send)
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/starlette/applications.py", line 122, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/starlette/middleware/errors.py", line 184, in __call__
+    raise exc
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/starlette/middleware/errors.py", line 162, in __call__
+    await self.app(scope, receive, _send)
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/starlette/middleware/cors.py", line 83, in __call__
+    await self.app(scope, receive, send)
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/starlette/middleware/exceptions.py", line 79, in __call__
+    raise exc
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/starlette/middleware/exceptions.py", line 68, in __call__
+    await self.app(scope, receive, sender)
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/fastapi/middleware/asyncexitstack.py", line 20, in __call__
+    raise e
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/fastapi/middleware/asyncexitstack.py", line 17, in __call__
+    await self.app(scope, receive, send)
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/starlette/routing.py", line 718, in __call__
+    await route.handle(scope, receive, send)
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/starlette/routing.py", line 276, in handle
+    await self.app(scope, receive, send)
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/starlette/routing.py", line 66, in app
+    response = await func(request)
+               ^^^^^^^^^^^^^^^^^^^
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/fastapi/routing.py", line 291, in app
+    content = await serialize_response(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/fastapi/routing.py", line 154, in serialize_response
+    raise ResponseValidationError(
+fastapi.exceptions.ResponseValidationError
+WARNING:  WatchFiles detected changes in 'test_deck_load.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [12875]
+🎧 [09:23:31] INFO: 🚀 Initializing DJAgent with model: gpt-4.1-mini
+🎧 [09:23:31] INFO: ✅ DJAgent initialized successfully
+INFO:     Started server process [12985]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'check_tracks.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [12985]
+✅ Music library ready - tracks available, analysis on manual request only
+🎧 [09:24:05] INFO: 🚀 Initializing DJAgent with model: gpt-4.1-mini
+🎧 [09:24:05] INFO: ✅ DJAgent initialized successfully
+INFO:     Started server process [13212]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+✅ Music library ready - tracks available, analysis on manual request only
+INFO:     127.0.0.1:51585 - "GET /api/tracks HTTP/1.1" 404 Not Found
+✅ Found 1579 tracks in database
+INFO:     127.0.0.1:51626 - "GET /tracks HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51705 - "POST /api/decks/A/load HTTP/1.1" 500 Internal Server Error
+ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/uvicorn/protocols/http/httptools_impl.py", line 426, in run_asgi
+    result = await app(  # type: ignore[func-returns-value]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/uvicorn/middleware/proxy_headers.py", line 84, in __call__
+    return await self.app(scope, receive, send)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/fastapi/applications.py", line 289, in __call__
+    await super().__call__(scope, receive, send)
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/starlette/applications.py", line 122, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/starlette/middleware/errors.py", line 184, in __call__
+    raise exc
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/starlette/middleware/errors.py", line 162, in __call__
+    await self.app(scope, receive, _send)
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/starlette/middleware/cors.py", line 83, in __call__
+    await self.app(scope, receive, send)
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/starlette/middleware/exceptions.py", line 79, in __call__
+    raise exc
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/starlette/middleware/exceptions.py", line 68, in __call__
+    await self.app(scope, receive, sender)
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/fastapi/middleware/asyncexitstack.py", line 20, in __call__
+    raise e
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/fastapi/middleware/asyncexitstack.py", line 17, in __call__
+    await self.app(scope, receive, send)
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/starlette/routing.py", line 718, in __call__
+    await route.handle(scope, receive, send)
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/starlette/routing.py", line 276, in handle
+    await self.app(scope, receive, send)
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/starlette/routing.py", line 66, in app
+    response = await func(request)
+               ^^^^^^^^^^^^^^^^^^^
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/fastapi/routing.py", line 291, in app
+    content = await serialize_response(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/fastapi/routing.py", line 154, in serialize_response
+    raise ResponseValidationError(
+fastapi.exceptions.ResponseValidationError
+WARNING:  WatchFiles detected changes in 'services/deck_manager.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [13212]
+🎧 [09:25:30] INFO: 🚀 Initializing DJAgent with model: gpt-4.1-mini
+🎧 [09:25:30] INFO: ✅ DJAgent initialized successfully
+INFO:     Started server process [13635]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+✅ Music library ready - tracks available, analysis on manual request only
+INFO:     127.0.0.1:51783 - "POST /api/decks/A/load HTTP/1.1" 200 OK
+WARNING:  WatchFiles detected changes in 'check_track_structure.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [13635]
+🎧 [09:25:57] INFO: 🚀 Initializing DJAgent with model: gpt-4.1-mini
+🎧 [09:25:58] INFO: ✅ DJAgent initialized successfully
+INFO:     Started server process [13771]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'services/deck_manager.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [13771]
+✅ Music library ready - tracks available, analysis on manual request only
+🎧 [09:26:37] INFO: 🚀 Initializing DJAgent with model: gpt-4.1-mini
+🎧 [09:26:37] INFO: ✅ DJAgent initialized successfully
+INFO:     Started server process [13986]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'services/deck_manager.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [13986]
+✅ Music library ready - tracks available, analysis on manual request only
+🎧 [09:26:46] INFO: 🚀 Initializing DJAgent with model: gpt-4.1-mini
+🎧 [09:26:46] INFO: ✅ DJAgent initialized successfully
+INFO:     Started server process [14025]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'services/deck_manager.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [14025]
+✅ Music library ready - tracks available, analysis on manual request only
+🎧 [09:26:59] INFO: 🚀 Initializing DJAgent with model: gpt-4.1-mini
+🎧 [09:26:59] INFO: ✅ DJAgent initialized successfully
+INFO:     Started server process [14069]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'services/deck_manager.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [14069]
+✅ Music library ready - tracks available, analysis on manual request only
+🎧 [09:27:11] INFO: 🚀 Initializing DJAgent with model: gpt-4.1-mini
+🎧 [09:27:11] INFO: ✅ DJAgent initialized successfully
+INFO:     Started server process [14104]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'services/deck_manager.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [14104]
+✅ Music library ready - tracks available, analysis on manual request only
+🎧 [09:27:19] INFO: 🚀 Initializing DJAgent with model: gpt-4.1-mini
+🎧 [09:27:19] INFO: ✅ DJAgent initialized successfully
+INFO:     Started server process [14140]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'services/deck_manager.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [14140]
+✅ Music library ready - tracks available, analysis on manual request only
+🎧 [09:27:28] INFO: 🚀 Initializing DJAgent with model: gpt-4.1-mini
+🎧 [09:27:29] INFO: ✅ DJAgent initialized successfully
+INFO:     Started server process [14175]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'services/deck_manager.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [14175]
+✅ Music library ready - tracks available, analysis on manual request only
+🎧 [09:28:01] INFO: 🚀 Initializing DJAgent with model: gpt-4.1-mini
+🎧 [09:28:01] INFO: ✅ DJAgent initialized successfully
+INFO:     Started server process [14234]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+Error querying tracks.db: no such column: energy
+✅ Music library ready - tracks available, analysis on manual request only
+INFO:     127.0.0.1:52139 - "POST /api/decks/A/load HTTP/1.1" 200 OK
+WARNING:  WatchFiles detected changes in 'check_tracks_schema.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [14234]
+🎧 [09:28:27] INFO: 🚀 Initializing DJAgent with model: gpt-4.1-mini
+🎧 [09:28:27] INFO: ✅ DJAgent initialized successfully
+INFO:     Started server process [14381]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'services/deck_manager.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [14381]
+✅ Music library ready - tracks available, analysis on manual request only
+🎧 [09:28:39] INFO: 🚀 Initializing DJAgent with model: gpt-4.1-mini
+🎧 [09:28:39] INFO: ✅ DJAgent initialized successfully
+INFO:     Started server process [14471]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'services/deck_manager.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [14471]
+✅ Music library ready - tracks available, analysis on manual request only
+🎧 [09:28:45] INFO: 🚀 Initializing DJAgent with model: gpt-4.1-mini
+🎧 [09:28:45] INFO: ✅ DJAgent initialized successfully
+INFO:     Started server process [14496]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+/Users/lynscott/Projects/streamie/apps/python-worker/services/deck_manager.py:180: RuntimeWarning: coroutine 'DJToolset.load_track' was never awaited
+  self.dj_toolset.load_deck(deck_id, track_filepath)
+RuntimeWarning: Enable tracemalloc to get the object allocation traceback
+/Users/lynscott/Projects/streamie/apps/python-worker/services/deck_manager.py:419: UserWarning: PySoundFile failed. Trying audioread instead.
+  audio, sr = librosa.load(filepath, sr=44100, mono=True)
+/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/librosa/core/audio.py:184: FutureWarning: librosa.core.audio.__audioread_load
+	Deprecated as of librosa version 0.10.0.
+	It will be removed in librosa version 1.0.
+  y, sr_native = __audioread_load(path, offset, duration, dtype)
+Error caching audio for PLAYLISTS/THRWBYKES/112/112 (Album)/07 Come See Me.mp3: [Errno 2] No such file or directory: 'PLAYLISTS/THRWBYKES/112/112 (Album)/07 Come See Me.mp3'
+✅ Music library ready - tracks available, analysis on manual request only
+INFO:     127.0.0.1:52231 - "POST /api/decks/A/load HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52273 - "GET /api/decks/A HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52349 - "GET /api/decks/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52377 - "PUT /api/decks/A/state HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52434 - "GET /api/decks/mixer/state HTTP/1.1" 200 OK
+Error clearing deck: 'Deck' object has no attribute 'started_playing_at'
+INFO:     127.0.0.1:52455 - "POST /api/decks/A/clear HTTP/1.1" 500 Internal Server Error
+WARNING:  WatchFiles detected changes in 'models/deck.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [14496]
+🎧 [09:31:04] INFO: 🚀 Initializing DJAgent with model: gpt-4.1-mini
+🎧 [09:31:04] INFO: ✅ DJAgent initialized successfully
+INFO:     Started server process [15135]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'migrations/002_add_started_playing_at.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [15135]
+✅ Music library ready - tracks available, analysis on manual request only
+🎧 [09:31:12] INFO: 🚀 Initializing DJAgent with model: gpt-4.1-mini
+🎧 [09:31:12] INFO: ✅ DJAgent initialized successfully
+INFO:     Started server process [15176]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'migrations/002_add_started_playing_at.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [15176]
+✅ Music library ready - tracks available, analysis on manual request only
+🎧 [09:31:23] INFO: 🚀 Initializing DJAgent with model: gpt-4.1-mini
+🎧 [09:31:23] INFO: ✅ DJAgent initialized successfully
+INFO:     Started server process [15266]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+✅ Music library ready - tracks available, analysis on manual request only
+INFO:     127.0.0.1:52591 - "POST /api/decks/A/clear HTTP/1.1" 200 OK
