@@ -28,7 +28,12 @@ async def get_engine():
 
 async def get_deck_manager():
     engine = await get_engine()
-    return DeckManager(engine)
+    deck_manager = DeckManager(engine)
+    # Create mixer manager and set cross-references
+    from services.mixer_manager import MixerManager
+    mixer_manager = MixerManager(engine)
+    deck_manager.set_mixer_manager(mixer_manager)
+    return deck_manager
 
 
 # Request/Response models

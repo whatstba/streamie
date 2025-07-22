@@ -74,6 +74,13 @@ class Deck(Base):
     cache_filepath = Column(String)  # Path to cached numpy array
     waveform_data = Column(Text)  # JSON waveform for visualization
     
+    # Mixer integration
+    crossfader_gain = Column(Float, default=1.0)  # Gain from crossfader position
+    auto_gain_applied = Column(Boolean, default=False)
+    cue_active = Column(Boolean, default=False)  # Cue/monitor active
+    peak_level = Column(Float, default=0.0)  # Peak level meter
+    rms_level = Column(Float, default=0.0)  # RMS level meter
+    
     # Relationships
     track = relationship("Track")
     history_entries = relationship("DeckHistory", back_populates="deck")
@@ -141,6 +148,7 @@ class MixerState(Base):
     # Recording/broadcasting
     recording = Column(Boolean, default=False)
     recording_filepath = Column(String)
+    recording_started_at = Column(DateTime)
     broadcasting = Column(Boolean, default=False)
     broadcast_url = Column(String)
     

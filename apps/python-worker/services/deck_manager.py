@@ -15,6 +15,7 @@ from models import Deck, DeckHistory, Track, MixerState, DeckStatus, SyncMode
 from models.database import get_session
 from tools.dj_toolset import DJToolset
 from utils.enhanced_analyzer import EnhancedTrackAnalyzer
+from services.mixer_manager import MixerManager
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +35,8 @@ class DeckManager:
         }
         # Path to tracks database
         self.tracks_db_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "tracks.db")
+        # Mixer manager for coordination
+        self.mixer_manager = None  # Will be set after initialization
         
     async def get_deck_state(self, deck_id: str) -> Optional[Dict]:
         """Get current state of a deck"""
@@ -187,6 +190,13 @@ class DeckManager:
                     logger.error(f"Error loading track with DJToolset: {e}")
                 
                 await session.commit()
+                
+                # Optionally apply auto-gain on load
+                if self.mixer_manager:
+                    try:
+                        await self.mixer_manager.auto_gain_deck(deck_id)
+                    except Exception as e:
+                        logger.warning(f"Failed to apply auto-gain: {e}")
                 
                 return {
                     'success': True,
@@ -494,3 +504,25 @@ class DeckManager:
                 },
                 'transition_duration': bars_before_end / (deck_a.bpm / 60) if deck_a.bpm else 30  # seconds
             }
+    
+    async def get_deck_effective_output(self, deck_id: str) -> Dict:
+        """Get the effective output level for a deck considering all mixer settings"""
+        if not self.mixer_manager:
+            # Fallback if mixer manager not available
+            async with get_session(self.engine) as session:
+                deck = await session.get(Deck, deck_id)
+                if not deck:
+                    return {'deck_id': deck_id, 'level': 0.0, 'error': 'Deck not found'}
+                
+                return {
+                    'deck_id': deck_id,
+                    'level': deck.volume * deck.gain,
+                    'clipping': False
+                }
+        
+        # Use mixer manager for full calculation
+        return await self.mixer_manager.calculate_channel_output(deck_id)
+    
+    def set_mixer_manager(self, mixer_manager):
+        """Set the mixer manager reference for coordination"""
+        self.mixer_manager = mixer_manager
