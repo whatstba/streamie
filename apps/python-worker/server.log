@@ -1,135 +1,43 @@
-🎧 [09:57:57] INFO: 🚀 Initializing DJAgent with model: gpt-4.1-mini
-🎧 [09:57:57] INFO: ✅ DJAgent initialized successfully
+🎧 [11:48:13] INFO: 🚀 Initializing DJAgent with model: gpt-4.1-mini
+🎧 [11:48:13] INFO: ✅ DJAgent initialized successfully
 INFO:     Will watch for changes in these directories: ['/Users/lynscott/Projects/streamie/apps/python-worker']
 INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
-INFO:     Started reloader process [19290] using WatchFiles
-🎧 [09:57:59] INFO: 🚀 Initializing DJAgent with model: gpt-4.1-mini
-🎧 [09:57:59] INFO: ✅ DJAgent initialized successfully
-INFO:     Started server process [19338]
+INFO:     Started reloader process [33538] using WatchFiles
+🎧 [11:48:15] INFO: 🚀 Initializing DJAgent with model: gpt-4.1-mini
+🎧 [11:48:15] INFO: ✅ DJAgent initialized successfully
+INFO:     Started server process [33579]
 INFO:     Waiting for application startup.
 INFO:     Application startup complete.
-✅ Music library ready - tracks available, analysis on manual request only
-INFO:     127.0.0.1:55064 - "PUT /api/mixer/crossfader/curve HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55152 - "GET /api/mixer/levels HTTP/1.1" 200 OK
-/Users/lynscott/Projects/streamie/apps/python-worker/services/deck_manager.py:180: RuntimeWarning: coroutine 'DJToolset.load_track' was never awaited
-  self.dj_toolset.load_deck(deck_id, track_filepath)
-RuntimeWarning: Enable tracemalloc to get the object allocation traceback
-/Users/lynscott/Projects/streamie/apps/python-worker/services/deck_manager.py:419: UserWarning: PySoundFile failed. Trying audioread instead.
-  audio, sr = librosa.load(filepath, sr=44100, mono=True)
+INFO:     127.0.0.1:65052 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65119 - "POST /api/analysis/track HTTP/1.1" 200 OK
+/Users/lynscott/Projects/streamie/apps/python-worker/utils/librosa.py:10: UserWarning: PySoundFile failed. Trying audioread instead.
+  y, sr = librosa.load(file_path)
 /Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/librosa/core/audio.py:184: FutureWarning: librosa.core.audio.__audioread_load
 	Deprecated as of librosa version 0.10.0.
 	It will be removed in librosa version 1.0.
   y, sr_native = __audioread_load(path, offset, duration, dtype)
-Error caching audio for PLAYLISTS/THRWBYKES/112/112 (Album)/07 Come See Me.mp3: [Errno 2] No such file or directory: 'PLAYLISTS/THRWBYKES/112/112 (Album)/07 Come See Me.mp3'
-INFO:     127.0.0.1:55193 - "POST /api/decks/A/load HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55228 - "POST /api/mixer/auto-gain/A HTTP/1.1" 200 OK
-WARNING:  WatchFiles detected changes in 'services/deck_manager.py'. Reloading...
-INFO:     Shutting down
-INFO:     Waiting for application shutdown.
-INFO:     Application shutdown complete.
-INFO:     Finished server process [19338]
-🎧 [09:59:59] INFO: 🚀 Initializing DJAgent with model: gpt-4.1-mini
-🎧 [09:59:59] INFO: ✅ DJAgent initialized successfully
-INFO:     Started server process [19825]
-INFO:     Waiting for application startup.
-INFO:     Application startup complete.
-WARNING:  WatchFiles detected changes in 'services/deck_manager.py'. Reloading...
-INFO:     Shutting down
-INFO:     Waiting for application shutdown.
-INFO:     Application shutdown complete.
-INFO:     Finished server process [19825]
-✅ Music library ready - tracks available, analysis on manual request only
-🎧 [10:00:08] INFO: 🚀 Initializing DJAgent with model: gpt-4.1-mini
-🎧 [10:00:08] INFO: ✅ DJAgent initialized successfully
-INFO:     Started server process [19853]
-INFO:     Waiting for application startup.
-INFO:     Application startup complete.
-WARNING:  WatchFiles detected changes in 'services/deck_manager.py'. Reloading...
-INFO:     Shutting down
-INFO:     Waiting for application shutdown.
-INFO:     Application shutdown complete.
-INFO:     Finished server process [19853]
-✅ Music library ready - tracks available, analysis on manual request only
-🎧 [10:00:19] INFO: 🚀 Initializing DJAgent with model: gpt-4.1-mini
-🎧 [10:00:19] INFO: ✅ DJAgent initialized successfully
-INFO:     Started server process [19894]
-INFO:     Waiting for application startup.
-INFO:     Application startup complete.
-WARNING:  WatchFiles detected changes in 'services/deck_manager.py'. Reloading...
-INFO:     Shutting down
-INFO:     Waiting for application shutdown.
-INFO:     Application shutdown complete.
-INFO:     Finished server process [19894]
-✅ Music library ready - tracks available, analysis on manual request only
-🎧 [10:00:37] INFO: 🚀 Initializing DJAgent with model: gpt-4.1-mini
-🎧 [10:00:37] INFO: ✅ DJAgent initialized successfully
-INFO:     Started server process [19936]
-INFO:     Waiting for application startup.
-INFO:     Application startup complete.
-WARNING:  WatchFiles detected changes in 'routers/deck_router.py'. Reloading...
-INFO:     Shutting down
-INFO:     Waiting for application shutdown.
-INFO:     Application shutdown complete.
-INFO:     Finished server process [19936]
-✅ Music library ready - tracks available, analysis on manual request only
-🎧 [10:00:44] INFO: 🚀 Initializing DJAgent with model: gpt-4.1-mini
-🎧 [10:00:45] INFO: ✅ DJAgent initialized successfully
-INFO:     Started server process [19976]
-INFO:     Waiting for application startup.
-INFO:     Application startup complete.
-WARNING:  WatchFiles detected changes in 'test_mixer_integration.py'. Reloading...
-INFO:     Shutting down
-INFO:     Waiting for application shutdown.
-INFO:     Application shutdown complete.
-INFO:     Finished server process [19976]
-✅ Music library ready - tracks available, analysis on manual request only
-🎧 [10:01:32] INFO: 🚀 Initializing DJAgent with model: gpt-4.1-mini
-🎧 [10:01:32] INFO: ✅ DJAgent initialized successfully
-INFO:     Started server process [20053]
-INFO:     Waiting for application startup.
-INFO:     Application startup complete.
-✅ Music library ready - tracks available, analysis on manual request only
-INFO:     127.0.0.1:55496 - "GET /api/mixer/state HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55498 - "PUT /api/mixer/crossfader HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55500 - "PUT /api/mixer/crossfader/curve HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55502 - "PUT /api/mixer/master HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55504 - "PUT /api/mixer/monitor HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55506 - "GET /api/mixer/levels HTTP/1.1" 200 OK
-/Users/lynscott/Projects/streamie/apps/python-worker/services/deck_manager.py:183: RuntimeWarning: coroutine 'DJToolset.load_track' was never awaited
-  self.dj_toolset.load_deck(deck_id, track_filepath)
+Real-time analysis error: [Errno 2] No such file or directory: '/Users/lynscott/Downloads/01 Kungs - Be Right Here (Short Edit).mp3'
+Error analyzing track /Users/lynscott/Downloads/01 Kungs - Be Right Here (Short Edit).mp3: [Errno 2] No such file or directory: '/Users/lynscott/Downloads/01 Kungs - Be Right Here (Short Edit).mp3'
+INFO:     127.0.0.1:65136 - "GET /api/analysis/queue/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65353 - "POST /api/analysis/track HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65357 - "GET /api/analysis/status/c5e23386-83b7-4981-aa58-da7317dcddaa HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65359 - "GET /api/analysis/queue/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65361 - "POST /api/analysis/results HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65363 - "POST /api/analysis/batch HTTP/1.1" 200 OK
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/asyncio/runners.py:118: RuntimeWarning: coroutine 'EnhancedTrackAnalyzer.analyze_file' was never awaited
+  return self._loop.run_until_complete(task)
 RuntimeWarning: Enable tracemalloc to get the object allocation traceback
-/Users/lynscott/Projects/streamie/apps/python-worker/services/deck_manager.py:429: UserWarning: PySoundFile failed. Trying audioread instead.
-  audio, sr = librosa.load(filepath, sr=44100, mono=True)
-/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/librosa/core/audio.py:184: FutureWarning: librosa.core.audio.__audioread_load
-	Deprecated as of librosa version 0.10.0.
-	It will be removed in librosa version 1.0.
-  y, sr_native = __audioread_load(path, offset, duration, dtype)
-Error caching audio for PLAYLISTS/NEW JACK SWING/112/112 (Album)/05 Cupid.mp3: [Errno 2] No such file or directory: 'PLAYLISTS/NEW JACK SWING/112/112 (Album)/05 Cupid.mp3'
-INFO:     127.0.0.1:55508 - "POST /api/decks/B/load HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55510 - "POST /api/mixer/auto-gain/B HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55512 - "POST /api/mixer/channels/B/cue HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55514 - "GET /api/mixer/channel/B/level HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55516 - "POST /api/mixer/recording/start HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55518 - "POST /api/mixer/recording/stop HTTP/1.1" 200 OK
-/Users/lynscott/Projects/streamie/apps/python-worker/services/deck_manager.py:183: RuntimeWarning: coroutine 'DJToolset.load_track' was never awaited
-  self.dj_toolset.load_deck(deck_id, track_filepath)
-RuntimeWarning: Enable tracemalloc to get the object allocation traceback
-Error caching audio for PLAYLISTS/THRWBYKES/112/112 (Album)/07 Come See Me.mp3: [Errno 2] No such file or directory: 'PLAYLISTS/THRWBYKES/112/112 (Album)/07 Come See Me.mp3'
-INFO:     127.0.0.1:55520 - "POST /api/decks/A/load HTTP/1.1" 200 OK
-Error caching audio for PLAYLISTS/NEW JACK SWING/112/112 (Album)/05 Cupid.mp3: [Errno 2] No such file or directory: 'PLAYLISTS/NEW JACK SWING/112/112 (Album)/05 Cupid.mp3'
-INFO:     127.0.0.1:55522 - "POST /api/decks/B/load HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55524 - "PUT /api/mixer/crossfader HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55526 - "GET /api/mixer/levels HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55528 - "PUT /api/mixer/crossfader HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55530 - "GET /api/mixer/levels HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55532 - "PUT /api/mixer/crossfader HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55534 - "GET /api/mixer/levels HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55536 - "PUT /api/mixer/crossfader HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55538 - "GET /api/mixer/levels HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55540 - "PUT /api/mixer/crossfader HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55542 - "GET /api/mixer/levels HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55544 - "PUT /api/decks/A/state HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55546 - "GET /api/mixer/channel/A/level HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55548 - "GET /api/decks/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55550 - "GET /api/decks/A HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55552 - "PUT /api/decks/A/state HTTP/1.1" 200 OK
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+INFO:     127.0.0.1:65365 - "POST /api/analysis/beat-phase HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65367 - "POST /api/decks/A/load HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65370 - "GET /api/analysis/queue/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65372 - "POST /api/decks/B/load HTTP/1.1" 200 OK
+🔬 [11:50:58] INFO: 🔄 Analyzing transition from deck A to B
+INFO:     127.0.0.1:65374 - "POST /api/analysis/transition HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65376 - "GET /api/decks/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65378 - "GET /api/mixer/state HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65380 - "PUT /api/decks/A/state HTTP/1.1" 200 OK
+INFO:     ('127.0.0.1', 65382) - "WebSocket /api/analysis/stream/A" [accepted]
+INFO:     connection open
+INFO:     connection closed

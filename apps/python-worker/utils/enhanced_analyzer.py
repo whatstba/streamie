@@ -5,10 +5,25 @@ import json
 import logging
 import librosa
 import numpy as np
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Generator, Tuple
 import essentia.standard as es
+import asyncio
+from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class StreamingAnalysisResult:
+    """Result from streaming analysis chunk."""
+    chunk_index: int
+    total_chunks: int
+    bpm_estimate: Optional[float] = None
+    beat_positions: Optional[List[float]] = None
+    energy_level: Optional[float] = None
+    spectral_centroid: Optional[float] = None
+    onset_positions: Optional[List[float]] = None
+    is_final: bool = False
 
 
 class EnhancedTrackAnalyzer:
@@ -16,6 +31,8 @@ class EnhancedTrackAnalyzer:
 
     def __init__(self, db_path: str):
         self.db_path = db_path
+        self.streaming_chunk_size = 30  # seconds per chunk
+        self.streaming_overlap = 5  # seconds of overlap between chunks
 
     async def analyze_file(self, filepath: str) -> bool:
         """Analyze a single audio file and store results in database."""
@@ -420,3 +437,153 @@ class EnhancedTrackAnalyzer:
 
         finally:
             conn.close()
+    
+    async def analyze_streaming(self, filepath: str) -> Generator[StreamingAnalysisResult, None, None]:
+        """Analyze audio file in streaming chunks for real-time feedback."""
+        try:
+            # Get total duration first
+            info = await asyncio.to_thread(librosa.get_duration, filename=filepath)
+            total_duration = info
+            
+            # Calculate chunks
+            chunk_size_samples = int(self.streaming_chunk_size * 44100)  # Assuming 44.1kHz
+            overlap_samples = int(self.streaming_overlap * 44100)
+            
+            total_chunks = int(np.ceil(total_duration / (self.streaming_chunk_size - self.streaming_overlap)))
+            
+            # Process chunks
+            for chunk_idx in range(total_chunks):
+                offset = chunk_idx * (self.streaming_chunk_size - self.streaming_overlap)
+                duration = self.streaming_chunk_size
+                
+                # Load chunk
+                y_chunk, sr = await asyncio.to_thread(
+                    librosa.load, 
+                    filepath, 
+                    offset=offset, 
+                    duration=duration,
+                    sr=44100
+                )
+                
+                # Analyze chunk
+                result = await self._analyze_chunk(
+                    y_chunk, sr, chunk_idx, total_chunks, offset
+                )
+                
+                yield result
+                
+                # Final analysis on last chunk
+                if chunk_idx == total_chunks - 1:
+                    # Perform full key detection on complete file
+                    final_result = await self._finalize_streaming_analysis(filepath)
+                    yield final_result
+                    
+        except Exception as e:
+            logger.error(f"Streaming analysis failed: {e}")
+            yield StreamingAnalysisResult(
+                chunk_index=-1,
+                total_chunks=0,
+                is_final=True
+            )
+    
+    async def _analyze_chunk(self, y: np.ndarray, sr: int, 
+                           chunk_idx: int, total_chunks: int, 
+                           offset: float) -> StreamingAnalysisResult:
+        """Analyze a single audio chunk."""
+        try:
+            result = StreamingAnalysisResult(
+                chunk_index=chunk_idx,
+                total_chunks=total_chunks
+            )
+            
+            # Quick BPM estimation
+            tempo, beats = await asyncio.to_thread(
+                librosa.beat.beat_track, y=y, sr=sr
+            )
+            result.bpm_estimate = float(tempo)
+            
+            # Convert beat frames to absolute times
+            beat_times = librosa.frames_to_time(beats, sr=sr)
+            result.beat_positions = (beat_times + offset).tolist()
+            
+            # Energy analysis
+            rms = librosa.feature.rms(y=y)[0]
+            result.energy_level = float(np.mean(rms))
+            
+            # Spectral centroid (brightness)
+            cent = librosa.feature.spectral_centroid(y=y, sr=sr)[0]
+            result.spectral_centroid = float(np.mean(cent))
+            
+            # Onset detection for cue points
+            onset_frames = librosa.onset.onset_detect(y=y, sr=sr)
+            onset_times = librosa.frames_to_time(onset_frames, sr=sr)
+            result.onset_positions = (onset_times + offset).tolist()
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Chunk analysis failed: {e}")
+            return StreamingAnalysisResult(
+                chunk_index=chunk_idx,
+                total_chunks=total_chunks
+            )
+    
+    async def _finalize_streaming_analysis(self, filepath: str) -> StreamingAnalysisResult:
+        """Perform final analysis that requires the complete file."""
+        try:
+            # Key detection needs full file
+            key_info = await asyncio.to_thread(self._detect_key, filepath)
+            
+            # Create final result
+            result = StreamingAnalysisResult(
+                chunk_index=-1,
+                total_chunks=-1,
+                is_final=True
+            )
+            
+            # Add key info to result (extend dataclass in real implementation)
+            # For now, log it
+            logger.info(f"Final analysis - Key: {key_info['key']} {key_info['scale']}")
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Final analysis failed: {e}")
+            return StreamingAnalysisResult(
+                chunk_index=-1,
+                total_chunks=-1,
+                is_final=True
+            )
+    
+    def analyze_beat_phase(self, audio_position: float, beat_times: List[float], 
+                          bpm: float) -> Dict[str, float]:
+        """Calculate beat phase information for perfect sync."""
+        if not beat_times or bpm <= 0:
+            return {"phase": 0.0, "next_beat": 0.0, "beat_number": 0}
+        
+        # Find current beat
+        current_beat_idx = 0
+        for i, beat_time in enumerate(beat_times):
+            if beat_time > audio_position:
+                break
+            current_beat_idx = i
+        
+        # Calculate phase (0-1) within current beat
+        beat_duration = 60.0 / bpm
+        
+        if current_beat_idx < len(beat_times) - 1:
+            current_beat = beat_times[current_beat_idx]
+            next_beat = beat_times[current_beat_idx + 1]
+            phase = (audio_position - current_beat) / (next_beat - current_beat)
+        else:
+            # Extrapolate for last beat
+            current_beat = beat_times[current_beat_idx]
+            phase = (audio_position - current_beat) / beat_duration
+        
+        return {
+            "phase": min(1.0, max(0.0, phase)),
+            "next_beat": beat_times[current_beat_idx + 1] if current_beat_idx < len(beat_times) - 1 else current_beat + beat_duration,
+            "beat_number": current_beat_idx,
+            "bars": current_beat_idx // 4,
+            "beat_in_bar": current_beat_idx % 4
+        }

@@ -15,6 +15,7 @@ from agents.dj_agent import DJAgent  # Import the DJ agent
 from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, StreamingResponse
+from contextlib import asynccontextmanager
 from utils.sqlite_db import get_sqlite_db
 from utils.db_migrations import run_migrations
 from utils.music_library import MusicLibraryManager
@@ -24,6 +25,10 @@ from utils.enhanced_analyzer import EnhancedTrackAnalyzer
 from utils.metadata_analyzer import MetadataAnalyzer
 
 from pydantic import BaseModel
+import logging
+
+# Configure logger
+logger = logging.getLogger(__name__)
 from typing import List, Optional, Dict, Any
 import mimetypes
 import asyncio
@@ -38,9 +43,25 @@ import json
 from routers.deck_router import router as deck_router
 # Import the mixer router
 from routers.mixer_router import router as mixer_router
+# Import the analysis router
+from routers.analysis_router import router as analysis_router
 
-# Create FastAPI app instance
-app = FastAPI(title="AI DJ Backend")
+# Import service manager for cleanup
+from services.service_manager import service_manager
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manage application lifecycle"""
+    # Startup
+    logger.info("🚀 Starting up application...")
+    yield
+    # Shutdown
+    logger.info("🛑 Shutting down application...")
+    await service_manager.shutdown()
+    logger.info("✅ Application shutdown complete")
+
+# Create FastAPI app instance with lifespan
+app = FastAPI(title="AI DJ Backend", lifespan=lifespan)
 
 # Enable CORS for our Next.js frontend
 app.add_middleware(
@@ -59,6 +80,9 @@ app.include_router(deck_router)
 
 # Include the mixer router
 app.include_router(mixer_router)
+
+# Include the analysis router
+app.include_router(analysis_router)
 
 
 class SeratoHotCue(BaseModel):

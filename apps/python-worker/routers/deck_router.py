@@ -33,6 +33,12 @@ async def get_deck_manager():
     from services.mixer_manager import MixerManager
     mixer_manager = MixerManager(engine)
     deck_manager.set_mixer_manager(mixer_manager)
+    
+    # Get analysis service from service manager
+    from services.service_manager import service_manager
+    analysis_service = await service_manager.get_analysis_service()
+    deck_manager.set_analysis_service(analysis_service)
+    
     return deck_manager
 
 
