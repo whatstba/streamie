@@ -1,4 +1,5 @@
 """Check tracks database schema"""
+
 import sqlite3
 
 db_path = "tracks.db"

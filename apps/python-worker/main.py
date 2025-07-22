@@ -41,13 +41,19 @@ import json
 
 # Import the deck router
 from routers.deck_router import router as deck_router
+
 # Import the mixer router
 from routers.mixer_router import router as mixer_router
+
 # Import the analysis router
 from routers.analysis_router import router as analysis_router
 
+# Import the mix router
+from routers.mix_router import router as mix_router
+
 # Import service manager for cleanup
 from services.service_manager import service_manager
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -59,6 +65,7 @@ async def lifespan(app: FastAPI):
     logger.info("🛑 Shutting down application...")
     await service_manager.shutdown()
     logger.info("✅ Application shutdown complete")
+
 
 # Create FastAPI app instance with lifespan
 app = FastAPI(title="AI DJ Backend", lifespan=lifespan)
@@ -83,6 +90,9 @@ app.include_router(mixer_router)
 
 # Include the analysis router
 app.include_router(analysis_router)
+
+# Include the mix router
+app.include_router(mix_router)
 
 
 class SeratoHotCue(BaseModel):

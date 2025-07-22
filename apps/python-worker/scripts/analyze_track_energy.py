@@ -90,25 +90,27 @@ class EnergyAnalyzer:
         """Analyze a single track for energy information."""
         try:
             # Load audio with librosa
-            y, sr = librosa.load(filepath, sr=None, duration=90)  # Analyze first 90 seconds
-            
+            y, sr = librosa.load(
+                filepath, sr=None, duration=90
+            )  # Analyze first 90 seconds
+
             # RMS energy
             rms = librosa.feature.rms(y=y)[0]
-            
+
             # Spectral centroid (brightness)
             cent = librosa.feature.spectral_centroid(y=y, sr=sr)[0]
-            
+
             # Zero crossing rate (percussiveness)
             zcr = librosa.feature.zero_crossing_rate(y)[0]
-            
+
             # Calculate overall energy level (0-1)
             # Normalize RMS to 0-1 range
             energy_level = float(np.mean(rms))
             # Scale to 0-1 range (typical RMS values are 0-0.5)
             energy_level = min(energy_level * 2, 1.0)
-            
+
             energy_variance = float(np.std(rms))
-            
+
             # Classify energy profile
             if energy_variance > 0.3:
                 energy_profile = "dynamic"
@@ -118,7 +120,7 @@ class EnergyAnalyzer:
                 energy_profile = "low"
             else:
                 energy_profile = "medium"
-            
+
             return {
                 "level": energy_level,
                 "variance": energy_variance,
@@ -126,7 +128,7 @@ class EnergyAnalyzer:
                 "percussiveness": float(np.mean(zcr)),
                 "profile": energy_profile,
             }
-            
+
         except Exception as e:
             logger.error(f"Energy analysis failed for {filepath}: {e}")
             # Return default values
@@ -138,10 +140,12 @@ class EnergyAnalyzer:
                 "profile": "medium",
             }
 
-    def estimate_energy_from_features(self, bpm: Optional[float], genre: Optional[str]) -> dict:
+    def estimate_energy_from_features(
+        self, bpm: Optional[float], genre: Optional[str]
+    ) -> dict:
         """Quick energy estimation based on BPM and genre when audio analysis fails."""
         energy_level = 0.5  # Default
-        
+
         if bpm:
             # BPM-based estimation
             if bpm < 100:
@@ -150,17 +154,20 @@ class EnergyAnalyzer:
                 energy_level = 0.5 + (bpm - 100) / 56
             else:
                 energy_level = min(0.8 + (bpm - 128) / 40, 1.0)
-        
+
         if genre:
             genre_lower = genre.lower()
             # Genre-based adjustments
             if any(g in genre_lower for g in ["ambient", "downtempo", "chill"]):
                 energy_level = min(energy_level * 0.7, 0.5)
-            elif any(g in genre_lower for g in ["techno", "hardstyle", "dnb", "drum and bass"]):
+            elif any(
+                g in genre_lower
+                for g in ["techno", "hardstyle", "dnb", "drum and bass"]
+            ):
                 energy_level = max(energy_level * 1.2, 0.6)
             elif any(g in genre_lower for g in ["house", "dance", "electronic"]):
                 energy_level = max(energy_level, 0.5)
-        
+
         # Determine profile based on estimated level
         if energy_level > 0.7:
             profile = "high"
@@ -168,7 +175,7 @@ class EnergyAnalyzer:
             profile = "low"
         else:
             profile = "medium"
-        
+
         return {
             "level": energy_level,
             "variance": 0.1,
@@ -280,9 +287,7 @@ def main():
     cursor.execute("SELECT COUNT(*) FROM tracks")
     total = cursor.fetchone()[0]
 
-    cursor.execute(
-        "SELECT COUNT(*) FROM tracks WHERE energy_level IS NOT NULL"
-    )
+    cursor.execute("SELECT COUNT(*) FROM tracks WHERE energy_level IS NOT NULL")
     with_energy = cursor.fetchone()[0]
 
     conn.close()

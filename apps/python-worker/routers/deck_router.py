@@ -20,25 +20,29 @@ logger = logging.getLogger(__name__)
 # Database dependency
 _engine = None
 
+
 async def get_engine():
     global _engine
     if _engine is None:
         _engine = await init_db()
     return _engine
 
+
 async def get_deck_manager():
     engine = await get_engine()
     deck_manager = DeckManager(engine)
     # Create mixer manager and set cross-references
     from services.mixer_manager import MixerManager
+
     mixer_manager = MixerManager(engine)
     deck_manager.set_mixer_manager(mixer_manager)
-    
+
     # Get analysis service from service manager
     from services.service_manager import service_manager
+
     analysis_service = await service_manager.get_analysis_service()
     deck_manager.set_analysis_service(analysis_service)
-    
+
     return deck_manager
 
 
@@ -135,6 +139,7 @@ class MixPointResponse(BaseModel):
 
 # Endpoints
 
+
 @router.get("/", response_model=List[DeckStateResponse])
 async def get_all_decks(deck_manager: DeckManager = Depends(get_deck_manager)):
     """Get the current state of all decks"""
@@ -147,11 +152,15 @@ async def get_all_decks(deck_manager: DeckManager = Depends(get_deck_manager)):
 
 
 @router.get("/{deck_id}", response_model=DeckStateResponse)
-async def get_deck_state(deck_id: str, deck_manager: DeckManager = Depends(get_deck_manager)):
+async def get_deck_state(
+    deck_id: str, deck_manager: DeckManager = Depends(get_deck_manager)
+):
     """Get the current state of a specific deck"""
-    if deck_id not in ['A', 'B', 'C', 'D']:
-        raise HTTPException(status_code=400, detail="Invalid deck ID. Must be A, B, C, or D")
-    
+    if deck_id not in ["A", "B", "C", "D"]:
+        raise HTTPException(
+            status_code=400, detail="Invalid deck ID. Must be A, B, C, or D"
+        )
+
     try:
         state = await deck_manager.get_deck_state(deck_id)
         if not state:
@@ -164,37 +173,42 @@ async def get_deck_state(deck_id: str, deck_manager: DeckManager = Depends(get_d
 
 @router.post("/{deck_id}/load", response_model=LoadTrackResponse)
 async def load_track(
-    deck_id: str, 
+    deck_id: str,
     request: LoadTrackRequest,
-    deck_manager: DeckManager = Depends(get_deck_manager)
+    deck_manager: DeckManager = Depends(get_deck_manager),
 ):
     """Load a track onto a deck"""
-    if deck_id not in ['A', 'B', 'C', 'D']:
-        raise HTTPException(status_code=400, detail="Invalid deck ID. Must be A, B, C, or D")
-    
+    if deck_id not in ["A", "B", "C", "D"]:
+        raise HTTPException(
+            status_code=400, detail="Invalid deck ID. Must be A, B, C, or D"
+        )
+
     try:
         result = await deck_manager.load_track(deck_id, request.track_filepath)
         return result
     except Exception as e:
         logger.error(f"Error loading track: {e}")
         return LoadTrackResponse(
-            success=False,
-            deck_id=deck_id,
-            track=None,
-            error=str(e)
+            success=False, deck_id=deck_id, track=None, error=str(e)
         )
 
 
 @router.post("/{deck_id}/clear")
-async def clear_deck(deck_id: str, deck_manager: DeckManager = Depends(get_deck_manager)):
+async def clear_deck(
+    deck_id: str, deck_manager: DeckManager = Depends(get_deck_manager)
+):
     """Clear a deck"""
-    if deck_id not in ['A', 'B', 'C', 'D']:
-        raise HTTPException(status_code=400, detail="Invalid deck ID. Must be A, B, C, or D")
-    
+    if deck_id not in ["A", "B", "C", "D"]:
+        raise HTTPException(
+            status_code=400, detail="Invalid deck ID. Must be A, B, C, or D"
+        )
+
     try:
         result = await deck_manager.clear_deck(deck_id)
-        if not result['success']:
-            raise HTTPException(status_code=400, detail=result.get('error', 'Failed to clear deck'))
+        if not result["success"]:
+            raise HTTPException(
+                status_code=400, detail=result.get("error", "Failed to clear deck")
+            )
         return result
     except Exception as e:
         logger.error(f"Error clearing deck: {e}")
@@ -205,22 +219,26 @@ async def clear_deck(deck_id: str, deck_manager: DeckManager = Depends(get_deck_
 async def update_deck_state(
     deck_id: str,
     request: UpdateDeckStateRequest,
-    deck_manager: DeckManager = Depends(get_deck_manager)
+    deck_manager: DeckManager = Depends(get_deck_manager),
 ):
     """Update deck state (position, tempo, volume, etc)"""
-    if deck_id not in ['A', 'B', 'C', 'D']:
-        raise HTTPException(status_code=400, detail="Invalid deck ID. Must be A, B, C, or D")
-    
+    if deck_id not in ["A", "B", "C", "D"]:
+        raise HTTPException(
+            status_code=400, detail="Invalid deck ID. Must be A, B, C, or D"
+        )
+
     try:
         # Convert request to dict, excluding None values
         updates = request.dict(exclude_none=True)
-        
+
         if not updates:
             raise HTTPException(status_code=400, detail="No updates provided")
-        
+
         result = await deck_manager.update_deck_state(deck_id, updates)
-        if not result['success']:
-            raise HTTPException(status_code=400, detail=result.get('error', 'Failed to update deck'))
+        if not result["success"]:
+            raise HTTPException(
+                status_code=400, detail=result.get("error", "Failed to update deck")
+            )
         return result
     except Exception as e:
         logger.error(f"Error updating deck state: {e}")
@@ -229,14 +247,14 @@ async def update_deck_state(
 
 @router.get("/{deck_id}/history", response_model=List[DeckHistoryEntry])
 async def get_deck_history(
-    deck_id: str,
-    limit: int = 50,
-    deck_manager: DeckManager = Depends(get_deck_manager)
+    deck_id: str, limit: int = 50, deck_manager: DeckManager = Depends(get_deck_manager)
 ):
     """Get play history for a deck"""
-    if deck_id not in ['A', 'B', 'C', 'D']:
-        raise HTTPException(status_code=400, detail="Invalid deck ID. Must be A, B, C, or D")
-    
+    if deck_id not in ["A", "B", "C", "D"]:
+        raise HTTPException(
+            status_code=400, detail="Invalid deck ID. Must be A, B, C, or D"
+        )
+
     try:
         history = await deck_manager.get_deck_history(deck_id, limit)
         return history
@@ -247,21 +265,24 @@ async def get_deck_history(
 
 @router.post("/sync")
 async def sync_decks(
-    request: SyncDecksRequest,
-    deck_manager: DeckManager = Depends(get_deck_manager)
+    request: SyncDecksRequest, deck_manager: DeckManager = Depends(get_deck_manager)
 ):
     """Sync two decks for beatmatching"""
-    if request.leader_deck_id not in ['A', 'B', 'C', 'D']:
+    if request.leader_deck_id not in ["A", "B", "C", "D"]:
         raise HTTPException(status_code=400, detail="Invalid leader deck ID")
-    if request.follower_deck_id not in ['A', 'B', 'C', 'D']:
+    if request.follower_deck_id not in ["A", "B", "C", "D"]:
         raise HTTPException(status_code=400, detail="Invalid follower deck ID")
     if request.leader_deck_id == request.follower_deck_id:
         raise HTTPException(status_code=400, detail="Cannot sync deck with itself")
-    
+
     try:
-        result = await deck_manager.sync_decks(request.leader_deck_id, request.follower_deck_id)
-        if not result['success']:
-            raise HTTPException(status_code=400, detail=result.get('error', 'Failed to sync decks'))
+        result = await deck_manager.sync_decks(
+            request.leader_deck_id, request.follower_deck_id
+        )
+        if not result["success"]:
+            raise HTTPException(
+                status_code=400, detail=result.get("error", "Failed to sync decks")
+            )
         return result
     except Exception as e:
         logger.error(f"Error syncing decks: {e}")
@@ -283,19 +304,20 @@ async def get_mixer_state(deck_manager: DeckManager = Depends(get_deck_manager))
 
 @router.put("/mixer/state")
 async def update_mixer_state(
-    request: MixerUpdateRequest,
-    deck_manager: DeckManager = Depends(get_deck_manager)
+    request: MixerUpdateRequest, deck_manager: DeckManager = Depends(get_deck_manager)
 ):
     """Update mixer state"""
     try:
         updates = request.dict(exclude_none=True)
-        
+
         if not updates:
             raise HTTPException(status_code=400, detail="No updates provided")
-        
+
         result = await deck_manager.update_mixer_state(updates)
-        if not result['success']:
-            raise HTTPException(status_code=400, detail=result.get('error', 'Failed to update mixer'))
+        if not result["success"]:
+            raise HTTPException(
+                status_code=400, detail=result.get("error", "Failed to update mixer")
+            )
         return result
     except Exception as e:
         logger.error(f"Error updating mixer state: {e}")
@@ -306,14 +328,16 @@ async def update_mixer_state(
 async def calculate_mix_point(
     deck_a_id: str,
     deck_b_id: str,
-    deck_manager: DeckManager = Depends(get_deck_manager)
+    deck_manager: DeckManager = Depends(get_deck_manager),
 ):
     """Calculate optimal mix point between two decks"""
-    if deck_a_id not in ['A', 'B', 'C', 'D'] or deck_b_id not in ['A', 'B', 'C', 'D']:
+    if deck_a_id not in ["A", "B", "C", "D"] or deck_b_id not in ["A", "B", "C", "D"]:
         raise HTTPException(status_code=400, detail="Invalid deck ID")
     if deck_a_id == deck_b_id:
-        raise HTTPException(status_code=400, detail="Cannot calculate mix point for same deck")
-    
+        raise HTTPException(
+            status_code=400, detail="Cannot calculate mix point for same deck"
+        )
+
     try:
         result = await deck_manager.calculate_mix_point(deck_a_id, deck_b_id)
         return MixPointResponse(**result)
@@ -324,5 +348,5 @@ async def calculate_mix_point(
             deck_a=None,
             deck_b=None,
             transition_duration=None,
-            error=str(e)
+            error=str(e),
         )

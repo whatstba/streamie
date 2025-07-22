@@ -6,15 +6,16 @@ import sqlite3
 import os
 from datetime import datetime
 
+
 def migrate():
     """Add tables for analysis task management and caching."""
-    
+
     # Get database path
     db_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "dj_system.db")
-    
+
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
-    
+
     try:
         # Create analysis_tasks table
         cursor.execute("""
@@ -33,7 +34,7 @@ def migrate():
                 FOREIGN KEY (deck_id) REFERENCES decks(id)
             )
         """)
-        
+
         # Create analysis_cache table for quick lookups
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS analysis_cache (
@@ -52,43 +53,43 @@ def migrate():
                 analysis_version TEXT DEFAULT '1.0'
             )
         """)
-        
+
         # Create indexes for performance
         cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_analysis_tasks_status 
             ON analysis_tasks(status)
         """)
-        
+
         cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_analysis_tasks_priority 
             ON analysis_tasks(priority, created_at)
         """)
-        
+
         cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_analysis_cache_updated 
             ON analysis_cache(last_updated)
         """)
-        
+
         # Add analysis fields to tracks table if not exists
         # Check if columns exist first
         cursor.execute("PRAGMA table_info(tracks)")
         columns = [col[1] for col in cursor.fetchall()]
-        
+
         new_columns = [
             ("spectral_centroid", "REAL"),
             ("danceability", "REAL"),
             ("analysis_version", "TEXT DEFAULT '1.0'"),
             ("analyzed_at", "TIMESTAMP"),
-            ("analysis_status", "TEXT DEFAULT 'pending'")
+            ("analysis_status", "TEXT DEFAULT 'pending'"),
         ]
-        
+
         for col_name, col_type in new_columns:
             if col_name not in columns:
                 cursor.execute(f"""
                     ALTER TABLE tracks ADD COLUMN {col_name} {col_type}
                 """)
                 print(f"Added column {col_name} to tracks table")
-        
+
         # Create transition_analysis table for caching transition compatibility
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS transition_analysis (
@@ -106,10 +107,10 @@ def migrate():
                 UNIQUE(track_a_filepath, track_b_filepath)
             )
         """)
-        
+
         conn.commit()
         print("✅ Analysis tables created successfully")
-        
+
     except Exception as e:
         print(f"❌ Migration failed: {e}")
         conn.rollback()

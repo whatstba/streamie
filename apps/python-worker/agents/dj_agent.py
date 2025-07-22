@@ -258,8 +258,10 @@ async def analyze_transition_compatibility(
                     "type": effect.type,
                     "start_at": effect.start_at,
                     "duration": effect.duration,
-                    "intensity": effect.intensity
-                } if hasattr(effect, 'type') else effect
+                    "intensity": effect.intensity,
+                }
+                if hasattr(effect, "type")
+                else effect
                 for effect in transition_plan.effects
             ],
             "reasoning": transition_plan.technique_notes,
@@ -270,7 +272,7 @@ async def analyze_transition_compatibility(
 
         # Extract recommended effects from AI plan
         for effect in transition_plan.effects:
-            effect_type = effect.type if hasattr(effect, 'type') else effect.get("type")
+            effect_type = effect.type if hasattr(effect, "type") else effect.get("type")
             if effect_type and effect_type not in compatibility["recommended_effects"]:
                 compatibility["recommended_effects"].append(effect_type)
 
@@ -1291,8 +1293,10 @@ class DJAgent:
                             "type": effect.type,
                             "start_at": effect.start_at,
                             "duration": effect.duration,
-                            "intensity": effect.intensity
-                        } if hasattr(effect, 'type') else effect
+                            "intensity": effect.intensity,
+                        }
+                        if hasattr(effect, "type")
+                        else effect
                         for effect in transition_plan.effects
                     ],
                     "reasoning": transition_plan.technique_notes,

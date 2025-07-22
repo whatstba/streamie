@@ -1,43 +1,295 @@
-🎧 [11:48:13] INFO: 🚀 Initializing DJAgent with model: gpt-4.1-mini
-🎧 [11:48:13] INFO: ✅ DJAgent initialized successfully
+🎧 [13:34:36] INFO: 🚀 Initializing DJAgent with model: gpt-4.1-mini
+🎧 [13:34:36] INFO: ✅ DJAgent initialized successfully
 INFO:     Will watch for changes in these directories: ['/Users/lynscott/Projects/streamie/apps/python-worker']
 INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
-INFO:     Started reloader process [33538] using WatchFiles
-🎧 [11:48:15] INFO: 🚀 Initializing DJAgent with model: gpt-4.1-mini
-🎧 [11:48:15] INFO: ✅ DJAgent initialized successfully
-INFO:     Started server process [33579]
+INFO:     Started reloader process [47018] using WatchFiles
+🎧 [13:34:38] INFO: 🚀 Initializing DJAgent with model: gpt-4.1-mini
+🎧 [13:34:38] INFO: ✅ DJAgent initialized successfully
+INFO:     Started server process [47064]
 INFO:     Waiting for application startup.
 INFO:     Application startup complete.
-INFO:     127.0.0.1:65052 - "GET / HTTP/1.1" 200 OK
-INFO:     127.0.0.1:65119 - "POST /api/analysis/track HTTP/1.1" 200 OK
-/Users/lynscott/Projects/streamie/apps/python-worker/utils/librosa.py:10: UserWarning: PySoundFile failed. Trying audioread instead.
-  y, sr = librosa.load(file_path)
-/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/site-packages/librosa/core/audio.py:184: FutureWarning: librosa.core.audio.__audioread_load
-	Deprecated as of librosa version 0.10.0.
-	It will be removed in librosa version 1.0.
-  y, sr_native = __audioread_load(path, offset, duration, dtype)
-Real-time analysis error: [Errno 2] No such file or directory: '/Users/lynscott/Downloads/01 Kungs - Be Right Here (Short Edit).mp3'
-Error analyzing track /Users/lynscott/Downloads/01 Kungs - Be Right Here (Short Edit).mp3: [Errno 2] No such file or directory: '/Users/lynscott/Downloads/01 Kungs - Be Right Here (Short Edit).mp3'
-INFO:     127.0.0.1:65136 - "GET /api/analysis/queue/status HTTP/1.1" 200 OK
-INFO:     127.0.0.1:65353 - "POST /api/analysis/track HTTP/1.1" 200 OK
-INFO:     127.0.0.1:65357 - "GET /api/analysis/status/c5e23386-83b7-4981-aa58-da7317dcddaa HTTP/1.1" 200 OK
-INFO:     127.0.0.1:65359 - "GET /api/analysis/queue/status HTTP/1.1" 200 OK
-INFO:     127.0.0.1:65361 - "POST /api/analysis/results HTTP/1.1" 200 OK
-INFO:     127.0.0.1:65363 - "POST /api/analysis/batch HTTP/1.1" 200 OK
+🎛️ [13:34:50] INFO: 🎛️ Initializing MixCoordinatorAgent...
+🎛️ [13:34:50] INFO: 🎛️ Creating LLM client...
+🎛️ [13:34:50] INFO: 🎛️ Creating workflow graph...
+🎛️ [13:34:50] INFO: 🎛️ MixCoordinatorAgent initialized successfully
 Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
-/Users/lynscott/.pyenv/versions/3.11.12/lib/python3.11/asyncio/runners.py:118: RuntimeWarning: coroutine 'EnhancedTrackAnalyzer.analyze_file' was never awaited
-  return self._loop.run_until_complete(task)
-RuntimeWarning: Enable tracemalloc to get the object allocation traceback
 Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
-INFO:     127.0.0.1:65365 - "POST /api/analysis/beat-phase HTTP/1.1" 200 OK
-INFO:     127.0.0.1:65367 - "POST /api/decks/A/load HTTP/1.1" 200 OK
-INFO:     127.0.0.1:65370 - "GET /api/analysis/queue/status HTTP/1.1" 200 OK
-INFO:     127.0.0.1:65372 - "POST /api/decks/B/load HTTP/1.1" 200 OK
-🔬 [11:50:58] INFO: 🔄 Analyzing transition from deck A to B
-INFO:     127.0.0.1:65374 - "POST /api/analysis/transition HTTP/1.1" 200 OK
-INFO:     127.0.0.1:65376 - "GET /api/decks/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:65378 - "GET /api/mixer/state HTTP/1.1" 200 OK
-INFO:     127.0.0.1:65380 - "PUT /api/decks/A/state HTTP/1.1" 200 OK
-INFO:     ('127.0.0.1', 65382) - "WebSocket /api/analysis/stream/A" [accepted]
-INFO:     connection open
-INFO:     connection closed
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+Error coordinating mix: 'MixerManager' object has no attribute 'get_state'
+INFO:     127.0.0.1:58101 - "POST /api/mix/coordinate HTTP/1.1" 500 Internal Server Error
+WARNING:  WatchFiles detected changes in 'routers/mix_router.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [47064]
+🎧 [13:35:05] INFO: 🚀 Initializing DJAgent with model: gpt-4.1-mini
+🎧 [13:35:06] INFO: ✅ DJAgent initialized successfully
+INFO:     Started server process [47229]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+🎛️ [13:35:10] INFO: 🎛️ Initializing MixCoordinatorAgent...
+🎛️ [13:35:10] INFO: 🎛️ Creating LLM client...
+🎛️ [13:35:10] INFO: 🎛️ Creating workflow graph...
+🎛️ [13:35:10] INFO: 🎛️ MixCoordinatorAgent initialized successfully
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+🎛️ [13:35:10] INFO: 🎛️ Starting mix coordination
+🎛️ [13:35:10] INFO: 🎛️ Analyzing deck states for mixing opportunities
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+🎛️ [13:35:10] INFO: 🎛️ No mix needed at this time
+Error coordinating mix: 6 validation errors for MixPlanResponse
+mix_decision
+  Input should be a valid dictionary or instance of MixDecision [type=model_type, input_value=None, input_type=NoneType]
+    For further information visit https://errors.pydantic.dev/2.5/v/model_type
+compatibility.overall
+  Field required [type=missing, input_value={}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.5/v/missing
+compatibility.bpm
+  Field required [type=missing, input_value={}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.5/v/missing
+compatibility.key
+  Field required [type=missing, input_value={}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.5/v/missing
+compatibility.energy
+  Field required [type=missing, input_value={}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.5/v/missing
+compatibility.genre
+  Field required [type=missing, input_value={}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.5/v/missing
+INFO:     127.0.0.1:58186 - "POST /api/mix/coordinate HTTP/1.1" 500 Internal Server Error
+WARNING:  WatchFiles detected changes in 'routers/mix_router.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [47229]
+🎧 [13:35:23] INFO: 🚀 Initializing DJAgent with model: gpt-4.1-mini
+🎧 [13:35:23] INFO: ✅ DJAgent initialized successfully
+INFO:     Started server process [47307]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'routers/mix_router.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [47307]
+🎧 [13:35:31] INFO: 🚀 Initializing DJAgent with model: gpt-4.1-mini
+🎧 [13:35:31] INFO: ✅ DJAgent initialized successfully
+INFO:     Started server process [47338]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+🎛️ [13:35:37] INFO: 🎛️ Initializing MixCoordinatorAgent...
+🎛️ [13:35:37] INFO: 🎛️ Creating LLM client...
+🎛️ [13:35:37] INFO: 🎛️ Creating workflow graph...
+🎛️ [13:35:37] INFO: 🎛️ MixCoordinatorAgent initialized successfully
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+🎛️ [13:35:37] INFO: 🎛️ Starting mix coordination
+🎛️ [13:35:37] INFO: 🎛️ Analyzing deck states for mixing opportunities
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+🎛️ [13:35:37] INFO: 🎛️ No mix needed at this time
+Error coordinating mix: 1 validation error for MixPlanResponse
+mix_decision
+  Input should be a valid dictionary or instance of MixDecision [type=model_type, input_value=None, input_type=NoneType]
+    For further information visit https://errors.pydantic.dev/2.5/v/model_type
+INFO:     127.0.0.1:58257 - "POST /api/mix/coordinate HTTP/1.1" 500 Internal Server Error
+WARNING:  WatchFiles detected changes in 'models/mix_models.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [47338]
+🎧 [13:35:53] INFO: 🚀 Initializing DJAgent with model: gpt-4.1-mini
+🎧 [13:35:53] INFO: ✅ DJAgent initialized successfully
+INFO:     Started server process [47454]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+🎛️ [13:36:00] INFO: 🎛️ Initializing MixCoordinatorAgent...
+🎛️ [13:36:00] INFO: 🎛️ Creating LLM client...
+🎛️ [13:36:00] INFO: 🎛️ Creating workflow graph...
+🎛️ [13:36:00] INFO: 🎛️ MixCoordinatorAgent initialized successfully
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+🎛️ [13:36:00] INFO: 🎛️ Starting mix coordination
+🎛️ [13:36:00] INFO: 🎛️ Analyzing deck states for mixing opportunities
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+🎛️ [13:36:00] INFO: 🎛️ No mix needed at this time
+INFO:     127.0.0.1:58310 - "POST /api/mix/coordinate HTTP/1.1" 200 OK
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+🎛️ [13:36:52] INFO: 🎛️ Starting mix coordination
+🎛️ [13:36:52] INFO: 🎛️ Analyzing deck states for mixing opportunities
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+🎛️ [13:36:52] INFO: 🎛️ No mix needed at this time
+INFO:     127.0.0.1:58420 - "POST /api/mix/coordinate HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58422 - "GET /api/mix/current-plan HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58424 - "GET /api/mix/history HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58426 - "GET /api/mix/transition/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58428 - "POST /api/decks/A/load HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58430 - "POST /api/decks/B/load HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58432 - "PUT /api/decks/A/state HTTP/1.1" 200 OK
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+🎛️ [13:36:56] INFO: 🎛️ Starting mix coordination
+🎛️ [13:36:56] INFO: 🎛️ Analyzing deck states for mixing opportunities
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+🎛️ [13:36:56] INFO: 🎛️ Evaluating track compatibility for mixing
+🎛️ [13:36:56] INFO: 🎛️ Generating mix plan with AI
+🎛️ [13:37:02] INFO: 🎛️ Generated mix plan: TransitionType.BEATMATCH_BLEND for 24.0s
+🎛️ [13:37:02] INFO: 🎛️ Validating mix plan
+🎛️ [13:37:02] INFO: 🎛️ Mix coordination complete: TransitionType.BEATMATCH_BLEND
+INFO:     127.0.0.1:58434 - "POST /api/mix/coordinate HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58443 - "GET /api/mix/current-plan HTTP/1.1" 200 OK
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+🎛️ [13:37:02] INFO: 🎛️ Starting mix coordination
+🎛️ [13:37:02] INFO: 🎛️ Analyzing deck states for mixing opportunities
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+🎛️ [13:37:02] INFO: 🎛️ Evaluating track compatibility for mixing
+🎛️ [13:37:02] INFO: 🎛️ Generating mix plan with AI
+🎛️ [13:37:08] INFO: 🎛️ Generated mix plan: TransitionType.BEATMATCH_BLEND for 24.0s
+🎛️ [13:37:08] INFO: 🎛️ Validating mix plan
+🎛️ [13:37:08] INFO: 🎛️ Mix coordination complete: TransitionType.BEATMATCH_BLEND
+INFO:     127.0.0.1:58445 - "POST /api/mix/coordinate HTTP/1.1" 200 OK
+🎚️ [13:37:08] INFO: 🎚️ Starting TransitionType.BEATMATCH_BLEND transition from deck A to B
+INFO:     127.0.0.1:58454 - "POST /api/mix/execute-transition HTTP/1.1" 200 OK
+🎚️ [13:37:08] INFO: 🎚️ Phase 1: Preparing transition
+🎚️ [13:37:08] INFO: 🎚️ Phase 2: Executing 24.0s transition
+🎚️ [13:37:08] ERROR: 🎚️ Transition failed: 'MixerManager' object has no attribute 'get_state'
+INFO:     127.0.0.1:58462 - "GET /api/mix/transition/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58464 - "GET /api/decks/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58466 - "GET /api/mixer/state HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58469 - "GET /api/analysis/queue/status HTTP/1.1" 200 OK
+WARNING:  WatchFiles detected changes in 'services/transition_executor.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [47454]
+🎧 [13:37:37] INFO: 🚀 Initializing DJAgent with model: gpt-4.1-mini
+🎧 [13:37:37] INFO: ✅ DJAgent initialized successfully
+INFO:     Started server process [47913]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+🎛️ [13:37:40] INFO: 🎛️ Initializing MixCoordinatorAgent...
+🎛️ [13:37:40] INFO: 🎛️ Creating LLM client...
+🎛️ [13:37:40] INFO: 🎛️ Creating workflow graph...
+🎛️ [13:37:40] INFO: 🎛️ MixCoordinatorAgent initialized successfully
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+🎛️ [13:37:40] INFO: 🎛️ Starting mix coordination
+🎛️ [13:37:40] INFO: 🎛️ Analyzing deck states for mixing opportunities
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+🎛️ [13:37:40] INFO: 🎛️ Evaluating track compatibility for mixing
+🎛️ [13:37:40] INFO: 🎛️ Generating mix plan with AI
+🎛️ [13:37:40] INFO: 🎛️ No mix needed at this time
+INFO:     127.0.0.1:58549 - "POST /api/mix/coordinate HTTP/1.1" 200 OK
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+🎛️ [13:38:44] INFO: 🎛️ Starting mix coordination
+🎛️ [13:38:44] INFO: 🎛️ Analyzing deck states for mixing opportunities
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+🎛️ [13:38:44] INFO: 🎛️ Evaluating track compatibility for mixing
+🎛️ [13:38:44] INFO: 🎛️ Generating mix plan with AI
+🎛️ [13:38:44] INFO: 🎛️ No mix needed at this time
+INFO:     127.0.0.1:58650 - "POST /api/mix/coordinate HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58652 - "GET /api/mix/current-plan HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58654 - "GET /api/mix/history HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58656 - "GET /api/mix/transition/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58658 - "POST /api/decks/A/load HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58662 - "POST /api/decks/B/load HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58664 - "PUT /api/decks/A/state HTTP/1.1" 200 OK
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+🎛️ [13:38:48] INFO: 🎛️ Starting mix coordination
+🎛️ [13:38:48] INFO: 🎛️ Analyzing deck states for mixing opportunities
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+🎛️ [13:38:48] INFO: 🎛️ Evaluating track compatibility for mixing
+🎛️ [13:38:48] INFO: 🎛️ Generating mix plan with AI
+🎛️ [13:38:56] INFO: 🎛️ Generated mix plan: TransitionType.BEATMATCH_BLEND for 24.0s
+🎛️ [13:38:56] INFO: 🎛️ Validating mix plan
+🎛️ [13:38:56] INFO: 🎛️ Mix coordination complete: TransitionType.BEATMATCH_BLEND
+INFO:     127.0.0.1:58674 - "POST /api/mix/coordinate HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58685 - "GET /api/mix/current-plan HTTP/1.1" 200 OK
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+🎛️ [13:38:56] INFO: 🎛️ Starting mix coordination
+🎛️ [13:38:56] INFO: 🎛️ Analyzing deck states for mixing opportunities
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+Error getting cached analysis: Expecting value: line 1 column 1 (char 0)
+🎛️ [13:38:56] INFO: 🎛️ Evaluating track compatibility for mixing
+🎛️ [13:38:56] INFO: 🎛️ Generating mix plan with AI
+🎛️ [13:39:00] INFO: 🎛️ Generated mix plan: TransitionType.BEATMATCH_BLEND for 24.0s
+🎛️ [13:39:00] INFO: 🎛️ Validating mix plan
+🎛️ [13:39:00] INFO: 🎛️ Mix coordination complete: TransitionType.BEATMATCH_BLEND
+INFO:     127.0.0.1:58687 - "POST /api/mix/coordinate HTTP/1.1" 200 OK
+🎚️ [13:39:00] INFO: 🎚️ Starting TransitionType.BEATMATCH_BLEND transition from deck A to B
+INFO:     127.0.0.1:58690 - "POST /api/mix/execute-transition HTTP/1.1" 200 OK
+🎚️ [13:39:00] INFO: 🎚️ Phase 1: Preparing transition
+🎚️ [13:39:00] INFO: 🎚️ Phase 2: Executing 24.0s transition
+🎚️ [13:39:00] INFO: 🎚️ Starting effect: EffectType.FILTER_SWEEP at intensity 0.35
+INFO:     127.0.0.1:58692 - "GET /api/mix/transition/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58697 - "GET /api/mix/transition/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58700 - "GET /api/mix/transition/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58704 - "GET /api/mix/transition/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58707 - "GET /api/mix/transition/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58709 - "GET /api/decks/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58711 - "GET /api/mixer/state HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58713 - "GET /api/analysis/queue/status HTTP/1.1" 200 OK
+🎚️ [13:39:12] INFO: 🎚️ Starting effect: EffectType.ECHO at intensity 0.3
+INFO:     127.0.0.1:58745 - "GET /api/decks/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58747 - "GET /api/mixer/state HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58749 - "GET /api/analysis/queue/status HTTP/1.1" 200 OK
+WARNING:  WatchFiles detected changes in 'test_deck_api.py', 'test_mixer_integration.py', 'services/audio_streamer.py', 'routers/analysis_router.py', 'scripts/analyze_track_energy.py', 'routers/__init__.py', 'services/deck_manager.py', 'test_full_integration.py', 'debug_server.py', 'migrations/003_add_mixer_fields.py', 'test_deck_load.py', 'models/database.py', 'services/mixer_manager.py', 'migrations/002_add_started_playing_at.py', 'api/__init__.py', 'utils/enhanced_analyzer.py', 'check_tracks_schema.py', 'models/deck.py', 'services/__init__.py', 'agents/realtime_analysis_agent.py', 'routers/deck_router.py', 'services/transition_executor.py', 'models/mix_models.py', 'agents/mix_coordinator_agent.py', 'check_track_structure.py', 'migrations/004_add_analysis_tables.py', 'test_mix_coordinator_integration.py', 'check_tracks.py', 'services/analysis_service.py', 'tools/dj_toolset.py', 'main.py', 'services/mix_planner.py', 'services/music_library.py', 'test_analysis_integration.py', 'services/service_manager.py', 'tools/__init__.py', 'models/__init__.py', 'routers/mix_router.py', 'agents/dj_agent.py', 'utils/dj_llm.py', 'tools/analyzers.py', 'routers/mixer_router.py', 'test_deck_db.py', 'migrations/001_add_deck_tables.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+🎚️ [13:39:24] INFO: 🎚️ Cancelling active transition
+🎚️ [13:39:24] INFO: 🎚️ Transition cancelled
+INFO:     Application shutdown complete.
+INFO:     Finished server process [47913]
+🎧 [13:39:26] INFO: 🚀 Initializing DJAgent with model: gpt-4.1-mini
+🎧 [13:39:26] INFO: ✅ DJAgent initialized successfully
+INFO:     Started server process [48450]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'agents/mix_coordinator_agent.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [48450]
+🎧 [13:39:40] INFO: 🚀 Initializing DJAgent with model: gpt-4.1-mini
+🎧 [13:39:40] INFO: ✅ DJAgent initialized successfully
+INFO:     Started server process [48565]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
