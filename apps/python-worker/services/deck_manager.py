@@ -43,6 +43,8 @@ class DeckManager:
         self.mixer_manager = None  # Will be set after initialization
         # Analysis service for real-time analysis
         self.analysis_service = None  # Will be set after initialization
+        # Audio engine for actual audio processing
+        self.audio_engine = None  # Will be set after initialization
 
     async def get_deck_state(self, deck_id: str) -> Optional[Dict]:
         """Get current state of a deck"""
@@ -196,18 +198,31 @@ class DeckManager:
                 deck.audio_cached = False
                 deck.started_playing_at = None  # Initialize this field
 
-                # Use DJToolset to load track
-                try:
-                    # Skip DJToolset for now as it has async/sync mismatch
-                    # TODO: Fix DJToolset to handle async properly
-                    pass
+                # Load track into audio engine (now fixed with thread pool)
+                if self.audio_engine:
+                    try:
+                        result = await self.audio_engine.load_track(
+                            deck_id, track_filepath
+                        )
+                        if result["status"] == "loaded":
+                            deck.audio_cached = True
+                            logger.info(
+                                f"Track loaded into audio engine for deck {deck_id}"
+                            )
+                        else:
+                            logger.error(
+                                f"Failed to load track into audio engine: {result.get('error')}"
+                            )
+                    except Exception as e:
+                        logger.error(f"Error loading track into audio engine: {e}")
 
-                    # Pre-load audio for caching
-                    await self._cache_audio(track_filepath)
-                    deck.audio_cached = True
-
-                except Exception as e:
-                    logger.error(f"Error loading track with DJToolset: {e}")
+                # Skip DJToolset loading as well
+                # try:
+                #     # Pre-load audio for caching
+                #     await self._cache_audio(track_filepath)
+                #     deck.audio_cached = True
+                # except Exception as e:
+                #     logger.error(f"Error loading track with DJToolset: {e}")
 
                 await session.commit()
 
@@ -286,8 +301,12 @@ class DeckManager:
                 deck.loaded_at = None
                 deck.audio_cached = False
 
-                # Clear from DJToolset
-                self.dj_toolset.clear_deck(deck_id)
+                # Clear from audio engine
+                if self.audio_engine:
+                    await self.audio_engine.unload_track(deck_id)
+                else:
+                    # Clear from DJToolset
+                    self.dj_toolset.clear_deck(deck_id)
 
                 # Clear from cache
                 if deck.track_filepath in self._audio_cache:
@@ -335,10 +354,15 @@ class DeckManager:
                             1 + updates["tempo_adjust"] / 100
                         )
 
-                        # Update DJToolset (expects value from -0.5 to 0.5)
-                        self.dj_toolset.set_tempo(
-                            deck_id, updates["tempo_adjust"] / 100
-                        )
+                        # Update audio engine or DJToolset
+                        if self.audio_engine:
+                            # Audio engine expects -0.5 to 0.5
+                            pass  # Will be synced by audio engine sync loop
+                        else:
+                            # Update DJToolset (expects value from -0.5 to 0.5)
+                            self.dj_toolset.set_tempo(
+                                deck_id, updates["tempo_adjust"] / 100
+                            )
 
                 if "is_playing" in updates:
                     if updates["is_playing"] and not deck.is_playing:
@@ -349,6 +373,10 @@ class DeckManager:
                     elif not updates["is_playing"] and deck.is_playing:
                         # Stopping playback
                         deck.status = DeckStatus.PAUSED
+
+                # Handle position seek with audio engine
+                if "position_normalized" in updates and self.audio_engine:
+                    self.audio_engine.seek_deck(deck_id, updates["position_normalized"])
 
                 if "sync_mode" in updates:
                     deck.sync_mode = SyncMode(updates["sync_mode"])
@@ -613,6 +641,10 @@ class DeckManager:
         """Set the analysis service reference for real-time analysis"""
         self.analysis_service = analysis_service
 
+    def set_audio_engine(self, audio_engine):
+        """Set the audio engine reference for audio processing"""
+        self.audio_engine = audio_engine
+
     async def set_position(self, deck_id: str, position_seconds: float) -> Dict:
         """Set the playback position of a deck"""
         async with self._deck_locks[deck_id]:
@@ -643,6 +675,13 @@ class DeckManager:
                         deck.position_normalized = (
                             position_seconds / duration if duration > 0 else 0
                         )
+
+                        # Update audio engine position
+                        if self.audio_engine:
+                            self.audio_engine.seek_deck(
+                                deck_id, deck.position_normalized
+                            )
+
                         await session.commit()
 
                         return {

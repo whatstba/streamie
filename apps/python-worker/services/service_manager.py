@@ -12,6 +12,7 @@ from services.deck_manager import DeckManager
 from services.mixer_manager import MixerManager
 from services.transition_executor import TransitionExecutor
 from services.effect_manager import EffectManager
+from services.audio_engine import AudioEngine
 from agents.mix_coordinator_agent import MixCoordinatorAgent
 from models.database import init_db
 
@@ -26,6 +27,7 @@ class ServiceManager:
     _deck_manager: Optional[DeckManager] = None
     _mixer_manager: Optional[MixerManager] = None
     _effect_manager: Optional[EffectManager] = None
+    _audio_engine: Optional[AudioEngine] = None
     _mix_coordinator: Optional[MixCoordinatorAgent] = None
     _transition_executor: Optional[TransitionExecutor] = None
     _engine = None
@@ -83,7 +85,28 @@ class ServiceManager:
             self._effect_manager = EffectManager()
             logger.info("✅ Effect manager initialized")
 
-            # 6. Initialize mix coordinator
+            # 6. Initialize audio engine
+            try:
+                self._audio_engine = AudioEngine(
+                    deck_manager=self._deck_manager,
+                    mixer_manager=self._mixer_manager,
+                    effect_manager=self._effect_manager,
+                )
+                await asyncio.wait_for(self._audio_engine.start(), timeout=5.0)
+                logger.info("✅ Audio engine initialized and started")
+            except asyncio.TimeoutError:
+                logger.error(
+                    "⚠️ Audio engine start timed out - continuing without audio"
+                )
+                self._audio_engine = None
+            except Exception as e:
+                logger.error(f"⚠️ Failed to start audio engine: {e}")
+                self._audio_engine = None
+
+            # 7. Set audio engine reference in deck manager
+            self._deck_manager.set_audio_engine(self._audio_engine)
+
+            # 8. Initialize mix coordinator
             self._mix_coordinator = MixCoordinatorAgent(
                 deck_manager=self._deck_manager,
                 mixer_manager=self._mixer_manager,
@@ -91,7 +114,7 @@ class ServiceManager:
             )
             logger.info("✅ Mix coordinator initialized")
 
-            # 7. Initialize transition executor with effect manager
+            # 9. Initialize transition executor with effect manager
             self._transition_executor = TransitionExecutor(
                 deck_manager=self._deck_manager,
                 mixer_manager=self._mixer_manager,
@@ -137,6 +160,11 @@ class ServiceManager:
         await self.initialize_all_services()
         return self._effect_manager
 
+    async def get_audio_engine(self) -> AudioEngine:
+        """Get or create the singleton AudioEngine instance"""
+        await self.initialize_all_services()
+        return self._audio_engine
+
     async def shutdown(self):
         """Shutdown all managed services"""
         logger.info("🛑 Shutting down services...")
@@ -144,6 +172,12 @@ class ServiceManager:
         # Cancel any active transitions first
         if self._transition_executor is not None:
             await self._transition_executor.cancel_transition()
+
+        # Shutdown audio engine first (it uses other services)
+        if self._audio_engine is not None:
+            await self._audio_engine.stop()
+            self._audio_engine = None
+            logger.info("✅ Audio engine stopped")
 
         # Shutdown effect manager
         if self._effect_manager is not None:
