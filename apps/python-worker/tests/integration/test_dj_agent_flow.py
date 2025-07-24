@@ -15,6 +15,7 @@ class TestDJAgentFlow:
     """Test DJ Agent and vibe-based playlist generation."""
 
     @pytest.mark.integration
+    @pytest.mark.asyncio
     async def test_generate_vibe_playlist(self, test_client, mock_langchain, mock_db):
         """Test generating a playlist based on vibe description."""
         request_data = {
@@ -69,6 +70,7 @@ class TestDJAgentFlow:
                 )
 
     @pytest.mark.integration
+    @pytest.mark.asyncio
     async def test_vibe_playlist_streaming(self, test_client, mock_langchain):
         """Test streaming AI thinking process during playlist generation."""
         request_params = {
@@ -122,6 +124,7 @@ class TestDJAgentFlow:
                     assert "output" in data
 
     @pytest.mark.integration
+    @pytest.mark.asyncio
     async def test_dj_agent_energy_patterns(self, test_client, mock_langchain, mock_db):
         """Test DJ agent respects energy patterns in playlist generation."""
         # Test different energy patterns
@@ -190,6 +193,7 @@ class TestDJAgentFlow:
                     )
 
     @pytest.mark.integration
+    @pytest.mark.asyncio
     async def test_dj_agent_bpm_progression(self, test_client, mock_langchain):
         """Test DJ agent maintains smooth BPM progression."""
         request_data = {
@@ -237,6 +241,7 @@ class TestDJAgentFlow:
                 )
 
     @pytest.mark.integration
+    @pytest.mark.asyncio
     async def test_dj_agent_error_handling(self, test_client):
         """Test DJ agent handles errors gracefully."""
         request_data = {"vibe": "test error handling", "num_tracks": 5}
@@ -256,6 +261,7 @@ class TestDJAgentFlow:
             assert "OpenAI API error" in response.json()["detail"]
 
     @pytest.mark.integration
+    @pytest.mark.asyncio
     async def test_dj_agent_with_constraints(self, test_client, mock_langchain):
         """Test DJ agent respects additional constraints."""
         request_data = {

@@ -13,13 +13,9 @@ const Player = () => {
   const {
     currentTrack,
     djMode,
-    isTransitioning,
-    transitionProgress,
-    timeUntilTransition,
-    autoTransition,
-    setAutoTransition,
-    forceTransition,
-    nextTrack,
+    isServerStreaming,
+    playbackStatus,
+    djSet,
   } = useAudioPlayer();
 
   const formatTime = (seconds: number): string => {
@@ -31,50 +27,41 @@ const Player = () => {
 
   return (
     <div className="h-24 bg-zinc-900 border-t border-zinc-800 px-4 relative">
-      {/* DJ Mode Transition Indicator */}
-      {djMode && isTransitioning && (
+      {/* Server Streaming Progress Indicator */}
+      {isServerStreaming && playbackStatus && djSet && (
         <div className="absolute top-0 left-0 right-0 h-1 bg-zinc-800">
           <div
             className="h-full bg-gradient-to-r from-purple-500 to-blue-500 transition-all duration-100"
-            style={{ width: `${transitionProgress * 100}%` }}
+            style={{ 
+              width: `${(playbackStatus.elapsed_time || 0) / djSet.total_duration * 100}%` 
+            }}
           />
         </div>
       )}
 
       <div className="max-w-screen-xl mx-auto h-full flex items-center justify-between gap-6">
-        {/* Left Side - Mix Controls */}
+        {/* Left Side - DJ Set Status */}
         <div className="flex-1 min-w-0 max-w-sm">
-          <div className="flex items-center gap-3">
-            {/*   */}
-
-            {nextTrack && !isTransitioning && (
-              <button
-                onClick={forceTransition}
-                className="flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-sm font-medium transition"
-                title="Force transition now"
-              >
-                <ForwardIcon className="h-4 w-4" />
-                Mix Now
-              </button>
-            )}
-          </div>
-
-          {/* DJ Mode Status */}
-          {djMode && (
-            <div className="mt-2 flex items-center gap-2 text-xs">
-              {/* <span className="px-2 py-0.5 bg-purple-600 rounded text-white font-medium">
-                DJ MODE
-              </span> */}
-              {isTransitioning && (
-                <span className="text-purple-400 animate-pulse">
-                  Crossfading... {Math.round(transitionProgress * 100)}%
+          {isServerStreaming && playbackStatus && djSet && (
+            <div className="space-y-2">
+              <div className="text-sm font-medium">
+                {djSet.name || 'DJ Set'} - {djSet.vibe_description}
+              </div>
+              <div className="flex items-center gap-3 text-xs text-gray-400">
+                <span>
+                  Track {(playbackStatus.current_track_order || 0) + 1} of {djSet.track_count}
                 </span>
-              )}
-              {!isTransitioning && timeUntilTransition > 0 && timeUntilTransition <= 60 && (
-                <span className="text-orange-400">
-                  Next mix in {formatTime(timeUntilTransition)}
-                </span>
-              )}
+                {playbackStatus.in_transition && (
+                  <span className="text-purple-400 animate-pulse">
+                    Mixing... {Math.round((playbackStatus.transition_progress || 0) * 100)}%
+                  </span>
+                )}
+                {playbackStatus.next_transition_in && playbackStatus.next_transition_in <= 60 && (
+                  <span className="text-orange-400">
+                    Next mix in {formatTime(playbackStatus.next_transition_in)}
+                  </span>
+                )}
+              </div>
             </div>
           )}
         </div>

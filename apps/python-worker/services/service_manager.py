@@ -13,6 +13,8 @@ from services.mixer_manager import MixerManager
 from services.transition_executor import TransitionExecutor
 from services.effect_manager import EffectManager
 from services.audio_engine import AudioEngine
+from services.dj_set_service import DJSetService
+from services.set_playback_controller import SetPlaybackController
 from agents.mix_coordinator_agent import MixCoordinatorAgent
 from models.database import init_db
 
@@ -30,6 +32,8 @@ class ServiceManager:
     _audio_engine: Optional[AudioEngine] = None
     _mix_coordinator: Optional[MixCoordinatorAgent] = None
     _transition_executor: Optional[TransitionExecutor] = None
+    _dj_set_service: Optional[DJSetService] = None
+    _set_playback_controller: Optional[SetPlaybackController] = None
     _engine = None
     _initialization_started = False
     _initialization_complete = False
@@ -94,10 +98,16 @@ class ServiceManager:
                 )
                 await asyncio.wait_for(self._audio_engine.start(), timeout=5.0)
                 logger.info("✅ Audio engine initialized and started")
+                
+                # Verify it's actually running
+                if not self._audio_engine._running:
+                    logger.error("⚠️ Audio engine started but _running is False!")
+                    
             except asyncio.TimeoutError:
                 logger.error(
                     "⚠️ Audio engine start timed out - continuing without audio"
                 )
+                logger.error(f"⚠️ Audio engine _running state: {self._audio_engine._running if self._audio_engine else 'No engine'}")
                 self._audio_engine = None
             except Exception as e:
                 logger.error(f"⚠️ Failed to start audio engine: {e}")
@@ -121,6 +131,20 @@ class ServiceManager:
                 effect_manager=self._effect_manager,
             )
             logger.info("✅ Transition executor initialized")
+
+            # 10. Initialize DJ set service
+            self._dj_set_service = DJSetService()
+            logger.info("✅ DJ set service initialized")
+
+            # 11. Initialize set playback controller
+            self._set_playback_controller = SetPlaybackController(
+                deck_manager=self._deck_manager,
+                mixer_manager=self._mixer_manager,
+                effect_manager=self._effect_manager,
+                audio_engine=self._audio_engine,
+                dj_set_service=self._dj_set_service,
+            )
+            logger.info("✅ Set playback controller initialized")
 
             self._initialization_complete = True
             logger.info("✅ All services initialized successfully")
@@ -165,6 +189,16 @@ class ServiceManager:
         await self.initialize_all_services()
         return self._audio_engine
 
+    async def get_dj_set_service(self) -> DJSetService:
+        """Get or create the singleton DJSetService instance"""
+        await self.initialize_all_services()
+        return self._dj_set_service
+
+    async def get_set_playback_controller(self) -> SetPlaybackController:
+        """Get or create the singleton SetPlaybackController instance"""
+        await self.initialize_all_services()
+        return self._set_playback_controller
+
     async def shutdown(self):
         """Shutdown all managed services"""
         logger.info("🛑 Shutting down services...")
@@ -195,6 +229,8 @@ class ServiceManager:
         self._mixer_manager = None
         self._mix_coordinator = None
         self._transition_executor = None
+        self._dj_set_service = None
+        self._set_playback_controller = None
         self._initialization_complete = False
         self._initialization_started = False
 

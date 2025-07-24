@@ -1,13 +1,10 @@
 """DJ Toolset - Core DJ functionality"""
 
-from typing import Optional, Dict, List, Tuple
-import asyncio
+from typing import Optional, Dict
 import numpy as np
 import librosa
-import soundfile as sf
 from dataclasses import dataclass, field
 import logging
-from scipy import signal
 import threading
 import queue
 import time

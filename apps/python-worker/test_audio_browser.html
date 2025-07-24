@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Streaming Test</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #fff;
+        }
+        
+        .test-section {
+            background: #2a2a2a;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        h1 {
+            color: #4CAF50;
+        }
+        
+        h2 {
+            color: #FFC107;
+            margin-top: 0;
+        }
+        
+        audio {
+            width: 100%;
+            margin: 10px 0;
+        }
+        
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        
+        button:hover {
+            background: #45a049;
+        }
+        
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+        
+        .success {
+            background: #4CAF50;
+            color: white;
+        }
+        
+        .error {
+            background: #f44336;
+            color: white;
+        }
+        
+        .info {
+            background: #2196F3;
+            color: white;
+        }
+        
+        .log {
+            background: #333;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+            margin-top: 10px;
+        }
+        
+        .log-entry {
+            margin-bottom: 5px;
+        }
+        
+        .time {
+            color: #888;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎵 Audio Streaming Test Suite</h1>
+    
+    <div class="test-section">
+        <h2>Test 1: Instant Test Tone</h2>
+        <p>This should play a 440Hz test tone immediately.</p>
+        <audio id="test1" controls>
+            <source src="http://localhost:8000/api/test/instant-tone" type="audio/wav">
+            Your browser does not support the audio element.
+        </audio>
+        <button onclick="reloadAudio('test1')">Reload</button>
+        <button onclick="testAudio('test1')">Test Programmatically</button>
+        <div id="status1"></div>
+        <div class="log" id="log1"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>Test 2: Chunked Test Tone</h2>
+        <p>This plays test tone in fixed-size WAV chunks.</p>
+        <audio id="test2" controls>
+            <source src="http://localhost:8000/api/test/chunked-tone" type="audio/wav">
+            Your browser does not support the audio element.
+        </audio>
+        <button onclick="reloadAudio('test2')">Reload</button>
+        <button onclick="testAudio('test2')">Test Programmatically</button>
+        <div id="status2"></div>
+        <div class="log" id="log2"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>Test 3: Real File Stream</h2>
+        <p>This streams a real audio file.</p>
+        <audio id="test3" controls>
+            <source src="http://localhost:8000/api/test/instant-file" type="audio/wav">
+            Your browser does not support the audio element.
+        </audio>
+        <button onclick="reloadAudio('test3')">Reload</button>
+        <button onclick="testAudio('test3')">Test Programmatically</button>
+        <div id="status3"></div>
+        <div class="log" id="log3"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>Test 4: DJ Set Chunked Stream</h2>
+        <p>This tests the actual DJ set streaming endpoint.</p>
+        <audio id="test4" controls>
+            <!-- Will be set dynamically -->
+        </audio>
+        <button onclick="testDJSet()">Generate & Play DJ Set</button>
+        <div id="status4"></div>
+        <div class="log" id="log4"></div>
+    </div>
+    
+    <script>
+        function log(testId, message) {
+            const logDiv = document.getElementById(`log${testId}`);
+            const time = new Date().toLocaleTimeString();
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.innerHTML = `<span class="time">[${time}]</span> ${message}`;
+            logDiv.appendChild(entry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+        
+        function setStatus(testId, message, type = 'info') {
+            const statusDiv = document.getElementById(`status${testId}`);
+            statusDiv.className = `status ${type}`;
+            statusDiv.textContent = message;
+        }
+        
+        function reloadAudio(audioId) {
+            const audio = document.getElementById(audioId);
+            const testId = audioId.replace('test', '');
+            
+            log(testId, 'Reloading audio element...');
+            audio.load();
+            
+            audio.addEventListener('loadstart', () => {
+                log(testId, 'Load started');
+            }, { once: true });
+            
+            audio.addEventListener('loadedmetadata', () => {
+                log(testId, `Metadata loaded - duration: ${audio.duration}s`);
+            }, { once: true });
+            
+            audio.addEventListener('canplay', () => {
+                log(testId, 'Can play');
+                setStatus(testId, 'Ready to play', 'success');
+            }, { once: true });
+            
+            audio.addEventListener('error', (e) => {
+                const error = audio.error;
+                let errorMsg = 'Unknown error';
+                
+                if (error) {
+                    switch(error.code) {
+                        case 1: errorMsg = 'MEDIA_ERR_ABORTED'; break;
+                        case 2: errorMsg = 'MEDIA_ERR_NETWORK'; break;
+                        case 3: errorMsg = 'MEDIA_ERR_DECODE'; break;
+                        case 4: errorMsg = 'MEDIA_ERR_SRC_NOT_SUPPORTED'; break;
+                    }
+                    errorMsg += ` - ${error.message || 'No message'}`;
+                }
+                
+                log(testId, `Error: ${errorMsg}`);
+                setStatus(testId, errorMsg, 'error');
+            }, { once: true });
+        }
+        
+        async function testAudio(audioId) {
+            const audio = document.getElementById(audioId);
+            const testId = audioId.replace('test', '');
+            
+            log(testId, 'Starting programmatic test...');
+            
+            try {
+                // Reset audio
+                audio.pause();
+                audio.currentTime = 0;
+                
+                // Try to play
+                log(testId, 'Attempting to play...');
+                const playPromise = audio.play();
+                
+                if (playPromise !== undefined) {
+                    await playPromise;
+                    log(testId, 'Playback started successfully');
+                    setStatus(testId, 'Playing', 'success');
+                    
+                    // Stop after 2 seconds
+                    setTimeout(() => {
+                        audio.pause();
+                        log(testId, 'Playback stopped');
+                        setStatus(testId, 'Test completed', 'info');
+                    }, 2000);
+                }
+            } catch (error) {
+                log(testId, `Play error: ${error.name} - ${error.message}`);
+                setStatus(testId, `${error.name}: ${error.message}`, 'error');
+            }
+        }
+        
+        async function testDJSet() {
+            const testId = '4';
+            const audio = document.getElementById('test4');
+            
+            log(testId, 'Generating DJ set...');
+            setStatus(testId, 'Generating DJ set...', 'info');
+            
+            try {
+                // Generate DJ set
+                const response = await fetch('http://localhost:8000/api/dj-set/generate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        vibe_description: "test streaming audio",
+                        duration_minutes: 5,
+                        energy_level: "medium"
+                    })
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+                }
+                
+                const djSet = await response.json();
+                log(testId, `DJ set generated: ${djSet.set_id}`);
+                
+                // Start playback
+                log(testId, 'Starting playback...');
+                const playResponse = await fetch(`http://localhost:8000/api/dj-set/${djSet.set_id}/play`, {
+                    method: 'POST'
+                });
+                
+                if (!playResponse.ok) {
+                    throw new Error(`Play failed: ${await playResponse.text()}`);
+                }
+                
+                log(testId, 'Playback started on server');
+                
+                // Wait a moment for server to initialize
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                
+                // Set audio source
+                const streamUrl = `http://localhost:8000/api/audio/stream/chunked/${djSet.set_id}`;
+                log(testId, `Setting stream URL: ${streamUrl}`);
+                
+                audio.src = streamUrl;
+                audio.load();
+                
+                // Try to play
+                const playPromise = audio.play();
+                if (playPromise !== undefined) {
+                    await playPromise;
+                    log(testId, 'Audio playing successfully');
+                    setStatus(testId, 'DJ set playing', 'success');
+                }
+                
+            } catch (error) {
+                log(testId, `Error: ${error.message}`);
+                setStatus(testId, error.message, 'error');
+            }
+        }
+        
+        // Add event listeners to all audio elements
+        document.addEventListener('DOMContentLoaded', () => {
+            const audioElements = document.querySelectorAll('audio');
+            
+            audioElements.forEach((audio, index) => {
+                const testId = (index + 1).toString();
+                
+                audio.addEventListener('loadstart', () => log(testId, 'Load started'));
+                audio.addEventListener('progress', () => log(testId, 'Buffering...'));
+                audio.addEventListener('canplay', () => log(testId, 'Can play'));
+                audio.addEventListener('playing', () => log(testId, 'Playing'));
+                audio.addEventListener('pause', () => log(testId, 'Paused'));
+                audio.addEventListener('ended', () => log(testId, 'Ended'));
+                
+                audio.addEventListener('error', (e) => {
+                    const error = audio.error;
+                    let errorMsg = 'Unknown error';
+                    
+                    if (error) {
+                        switch(error.code) {
+                            case 1: errorMsg = 'MEDIA_ERR_ABORTED'; break;
+                            case 2: errorMsg = 'MEDIA_ERR_NETWORK'; break;
+                            case 3: errorMsg = 'MEDIA_ERR_DECODE'; break;
+                            case 4: errorMsg = 'MEDIA_ERR_SRC_NOT_SUPPORTED'; break;
+                        }
+                    }
+                    
+                    log(testId, `Error: ${errorMsg}`);
+                    setStatus(testId, errorMsg, 'error');
+                });
+            });
+        });
+    </script>
+</body>
+</html>

@@ -7,10 +7,9 @@ export const useKeyboardShortcuts = () => {
   const {
     isPlaying,
     currentTrack,
-    pause,
-    play,
-    skipToNext,
-    skipToPrevious,
+    isServerStreaming,
+    pauseDJSet,
+    resumeDJSet,
     setVolume,
     volume,
     toggleMute,
@@ -30,11 +29,11 @@ export const useKeyboardShortcuts = () => {
       switch (e.code) {
         case 'Space':
           e.preventDefault();
-          if (currentTrack) {
+          if (isServerStreaming) {
             if (isPlaying) {
-              pause();
+              pauseDJSet();
             } else {
-              play();
+              resumeDJSet();
             }
           }
           break;
@@ -42,14 +41,14 @@ export const useKeyboardShortcuts = () => {
         case 'ArrowRight':
           if (e.shiftKey) {
             e.preventDefault();
-            skipToNext();
+            // Skip not supported in server streaming
           }
           break;
 
         case 'ArrowLeft':
           if (e.shiftKey) {
             e.preventDefault();
-            skipToPrevious();
+            // Skip not supported in server streaming
           }
           break;
 
@@ -86,11 +85,9 @@ export const useKeyboardShortcuts = () => {
     };
   }, [
     isPlaying,
-    currentTrack,
-    pause,
-    play,
-    skipToNext,
-    skipToPrevious,
+    isServerStreaming,
+    pauseDJSet,
+    resumeDJSet,
     setVolume,
     volume,
     toggleMute,

@@ -15,6 +15,7 @@ class TestDatabaseOperations:
     """Test database operations and SQLite adapter."""
 
     @pytest.mark.integration
+    @pytest.mark.asyncio
     async def test_store_track_analysis(self, test_client, mock_db, mock_audio_file):
         """Test storing track analysis results in database."""
 
@@ -67,6 +68,7 @@ class TestDatabaseOperations:
             conn.close()
 
     @pytest.mark.integration
+    @pytest.mark.asyncio
     async def test_mongodb_adapter_compatibility(self, test_client, mock_db):
         """Test SQLite adapter works with MongoDB-style queries."""
         from utils.sqlite_db import get_tracks_by_criteria, insert_track
@@ -103,6 +105,7 @@ class TestDatabaseOperations:
             conn.close()
 
     @pytest.mark.integration
+    @pytest.mark.asyncio
     async def test_beat_times_storage(self, test_client, mock_db):
         """Test storing and retrieving beat timing data."""
 
@@ -145,6 +148,7 @@ class TestDatabaseOperations:
             conn.close()
 
     @pytest.mark.integration
+    @pytest.mark.asyncio
     async def test_track_search_performance(self, test_client, mock_db):
         """Test track search with various criteria."""
         from utils.sqlite_db import search_tracks
@@ -216,6 +220,7 @@ class TestDatabaseOperations:
             conn.close()
 
     @pytest.mark.integration
+    @pytest.mark.asyncio
     async def test_database_migrations(self, test_client, mock_db):
         """Test database schema migrations and updates."""
 
@@ -251,6 +256,7 @@ class TestDatabaseOperations:
             conn.close()
 
     @pytest.mark.integration
+    @pytest.mark.asyncio
     async def test_transaction_handling(self, test_client, mock_db):
         """Test database transaction handling and rollback."""
 
@@ -294,6 +300,7 @@ class TestDatabaseOperations:
             conn.close()
 
     @pytest.mark.integration
+    @pytest.mark.asyncio
     async def test_duplicate_track_handling(self, test_client, mock_db):
         """Test handling of duplicate track entries."""
         from utils.sqlite_db import insert_or_update_track

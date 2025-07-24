@@ -7,6 +7,7 @@ import asyncio
 import os
 import sys
 import logging
+import pytest
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -23,6 +24,7 @@ logging.basicConfig(
 from agents.dj_agent import DJAgent
 
 
+@pytest.mark.asyncio
 async def test_ai_agent():
     """Test the AI-powered DJ agent functionality."""
 
@@ -76,7 +78,7 @@ async def test_ai_agent():
         vibe_analysis = await dj_service.analyze_vibe(
             "dark techno for late night warehouse party"
         )
-        print(f"✅ AI Vibe Analysis successful!")
+        print("✅ AI Vibe Analysis successful!")
         print(f"   Energy: {vibe_analysis.energy_level}")
         print(f"   BPM Range: {vibe_analysis.bpm_range}")
         print(f"   Mood: {vibe_analysis.mood_keywords}")

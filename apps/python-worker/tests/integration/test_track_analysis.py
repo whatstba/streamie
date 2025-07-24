@@ -18,6 +18,7 @@ class TestTrackAnalysis:
     """Test track analysis endpoints and functionality."""
 
     @pytest.mark.integration
+    @pytest.mark.asyncio
     async def test_analyze_single_track(self, test_client, mock_audio_file):
         """Test analyzing a single track."""
         # Mock the librosa beat tracking
@@ -56,6 +57,7 @@ class TestTrackAnalysis:
                     assert data["mood_analysis"]["mood_happy"] == 0.8
 
     @pytest.mark.integration
+    @pytest.mark.asyncio
     async def test_batch_analyze_tracks(self, test_client, mock_audio_files, temp_dir):
         """Test batch analysis of multiple tracks."""
         # Create request with file paths
@@ -96,6 +98,7 @@ class TestTrackAnalysis:
                 assert bpms == [120.0, 128.0, 140.0]
 
     @pytest.mark.integration
+    @pytest.mark.asyncio
     async def test_track_analysis_with_corrupted_file(self, test_client, temp_dir):
         """Test handling of corrupted audio files."""
         # Create a corrupted file
@@ -112,6 +115,7 @@ class TestTrackAnalysis:
             assert "error" in response.json()
 
     @pytest.mark.integration
+    @pytest.mark.asyncio
     async def test_track_analysis_caching(self, test_client, mock_audio_file, mock_db):
         """Test that analysis results are cached in database."""
         filename = Path(mock_audio_file).name
@@ -137,6 +141,7 @@ class TestTrackAnalysis:
                 assert response1.json() == response2.json()
 
     @pytest.mark.integration
+    @pytest.mark.asyncio
     async def test_track_listing_with_analysis(
         self, test_client, mock_audio_files, temp_dir
     ):
@@ -173,6 +178,7 @@ class TestTrackAnalysis:
                         assert track["bpm"] == 128.0
 
     @pytest.mark.integration
+    @pytest.mark.asyncio
     async def test_serato_data_extraction(self, test_client, mock_audio_file):
         """Test extraction of Serato cue points and beatgrid."""
         filename = Path(mock_audio_file).name

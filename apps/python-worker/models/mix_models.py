@@ -3,7 +3,7 @@ Pydantic models for Mix Coordinator Agent and transition planning.
 """
 
 from typing import List, Dict, Optional, Any
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 from datetime import datetime
 from enum import Enum
 
@@ -49,7 +49,7 @@ class EQAdjustment(BaseModel):
     mid: float = Field(default=0.0, ge=-1.0, le=1.0)
     high: float = Field(default=0.0, ge=-1.0, le=1.0)
 
-    @validator("low", "mid", "high")
+    @field_validator("low", "mid", "high")
     def validate_range(cls, v):
         return max(-1.0, min(1.0, v))
 
@@ -95,12 +95,12 @@ class MixDecision(BaseModel):
     reasoning: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
-    @validator("effects")
+    @field_validator("effects")
     def limit_effects(cls, v):
         # Limit to 2 effects max as per requirements
         return v[:2] if len(v) > 2 else v
 
-    @validator("source_deck", "target_deck")
+    @field_validator("source_deck", "target_deck")
     def validate_deck_ids(cls, v):
         if v not in ["A", "B", "C", "D"]:
             raise ValueError(f"Invalid deck ID: {v}")

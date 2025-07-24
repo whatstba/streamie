@@ -5,8 +5,6 @@ import numpy as np
 import struct
 import logging
 from typing import AsyncGenerator, Optional, Dict
-import queue
-import threading
 
 from tools.dj_toolset import DJToolset
 

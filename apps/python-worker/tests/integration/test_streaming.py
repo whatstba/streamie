@@ -11,6 +11,7 @@ class TestAudioStreaming:
     """Test audio file streaming endpoints."""
 
     @pytest.mark.integration
+    @pytest.mark.asyncio
     async def test_stream_audio_file(self, test_client, mock_audio_file):
         """Test streaming an entire audio file."""
         filename = Path(mock_audio_file).name
@@ -28,6 +29,7 @@ class TestAudioStreaming:
                     assert response.content == b"fake audio data"
 
     @pytest.mark.integration
+    @pytest.mark.asyncio
     async def test_stream_with_range_request(self, test_client, mock_audio_file):
         """Test streaming with HTTP range requests."""
         filename = Path(mock_audio_file).name
@@ -66,6 +68,7 @@ class TestAudioStreaming:
                     assert len(response.content) == 100000
 
     @pytest.mark.integration
+    @pytest.mark.asyncio
     async def test_stream_nonexistent_file(self, test_client):
         """Test streaming a file that doesn't exist."""
         with patch("os.path.exists", return_value=False):
@@ -76,6 +79,7 @@ class TestAudioStreaming:
             assert "not found" in response.json()["detail"].lower()
 
     @pytest.mark.integration
+    @pytest.mark.asyncio
     async def test_stream_invalid_range(self, test_client, mock_audio_file):
         """Test streaming with invalid range requests."""
         filename = Path(mock_audio_file).name
@@ -91,6 +95,7 @@ class TestAudioStreaming:
                 assert response.headers["content-range"] == f"bytes */{file_size}"
 
     @pytest.mark.integration
+    @pytest.mark.asyncio
     async def test_stream_multiple_ranges(self, test_client, mock_audio_file):
         """Test handling of multiple range requests (not supported)."""
         filename = Path(mock_audio_file).name
@@ -105,6 +110,7 @@ class TestAudioStreaming:
                 assert response.status_code in [200, 206]
 
     @pytest.mark.integration
+    @pytest.mark.asyncio
     async def test_get_artwork(self, test_client, mock_audio_file):
         """Test extracting and serving album artwork."""
         filename = Path(mock_audio_file).name
@@ -123,6 +129,7 @@ class TestAudioStreaming:
             assert response.content.startswith(b"\xff\xd8\xff\xe0")  # JPEG header
 
     @pytest.mark.integration
+    @pytest.mark.asyncio
     async def test_get_artwork_no_image(self, test_client, mock_audio_file):
         """Test handling tracks without artwork."""
         filename = Path(mock_audio_file).name
@@ -138,6 +145,7 @@ class TestAudioStreaming:
             assert "No artwork found" in response.json()["detail"]
 
     @pytest.mark.integration
+    @pytest.mark.asyncio
     async def test_concurrent_streaming(self, test_client, mock_audio_file):
         """Test handling concurrent streaming requests."""
         filename = Path(mock_audio_file).name
@@ -165,6 +173,7 @@ class TestAudioStreaming:
                         assert len(response.content) == 100000
 
     @pytest.mark.integration
+    @pytest.mark.asyncio
     async def test_stream_different_audio_formats(self, test_client, temp_dir):
         """Test streaming various audio formats."""
         formats = [

@@ -50,7 +50,7 @@ class TrackEvaluation(BaseModel):
 class TransitionEffect(BaseModel):
     """Individual transition effect with required fields"""
 
-    type: str = Field(description="Effect type: filter, echo, scratch")
+    type: str = Field(description="Effect type: filter_sweep, echo, reverb, delay, gate, flanger, eq_sweep, scratch")
     start_at: float = Field(
         description="Start time in seconds from transition start", ge=0
     )
@@ -125,10 +125,30 @@ class DJLLMService:
                     """You are a world-class DJ with deep understanding of music, energy, and crowd dynamics.
 Analyze the vibe request and provide detailed guidance for track selection.
 
+AVAILABLE GENRES (you MUST only use these exact genres):
+- African Music
+- Alternative
+- Bolero
+- Brazilian Music
+- Dance
+- Electro
+- Films/Games
+- Hip-Hop/Rap
+- Jazz
+- Latin Music
+- Pop
+- R&B
+- Rap/Hip Hop
+- Reggae
+- Reggaeton
+- Rock
+- Salsa
+- Soul & Funk
+
 Consider:
 - Energy levels and progression throughout the set
 - Mood and emotional journey
-- Genre compatibility and crossover potential
+- Genre compatibility (ONLY use genres from the above list)
 - BPM ranges that work for the vibe
 - Professional mixing techniques
 
@@ -242,6 +262,29 @@ Current Playlist: {playlist_context}""",
                 return TrackEvaluation(**result)
             return result
         except Exception as e:
+            if "Invalid json output" in str(e):
+                logger.error(f"❌ Track evaluation failed with JSON error: {e}")
+                # Try to extract any partial JSON and use defaults
+                try:
+                    # Attempt to extract score if present
+                    error_str = str(e)
+                    if '"score"' in error_str:
+                        import re
+                        score_match = re.search(r'"score":\s*([0-9.]+)', error_str)
+                        score = float(score_match.group(1)) if score_match else 0.5
+                    else:
+                        score = 0.5
+                    
+                    return TrackEvaluation(
+                        score=score,
+                        reasoning="Track evaluated with partial data due to JSON error",
+                        energy_match=score,  # Use score as energy match fallback
+                        suggested_position=None,
+                        mixing_notes="Standard mix approach",
+                    )
+                except:
+                    pass
+            
             logger.error(f"❌ Track evaluation failed: {e}")
             # Basic fallback
             return TrackEvaluation(
@@ -266,12 +309,20 @@ Consider BPM compatibility, key matching, energy levels, and create a detailed t
 Think like a professional: phrasing, harmonic mixing, effects timing, and crowd energy.
 
 Your transition should be musically intelligent and technically precise.
+For maximum impact, use effect intensities of 0.7-1.0. Don't be subtle - make the effects audible!
 
 IMPORTANT: Each effect in the effects array MUST include ALL of these fields:
-- type: Effect type (filter, echo, scratch)
+- type: Effect type - choose from: filter_sweep, echo, reverb, delay, gate, flanger, eq_sweep, scratch
 - start_at: Start time in seconds (e.g., 0, 2.5, 4)
 - duration: Duration in seconds (e.g., 3, 5, 8)
-- intensity: Effect intensity from 0 to 1 (e.g., 0.3, 0.7, 1.0)
+- intensity: Effect intensity from 0 to 1 (recommend 0.7-1.0 for audible effects)
+
+Effect recommendations by genre:
+- House/Techno: filter_sweep (0.8-1.0), reverb (0.7), delay (0.8)
+- Hip-Hop: scratch (0.9), gate (0.8), echo (0.7)
+- Reggae/Dub: echo (0.9), delay (1.0), reverb (0.8)
+- EDM: filter_sweep (1.0), flanger (0.7), gate (0.9)
+- Latin/Afrobeat: eq_sweep (0.8), reverb (0.6), echo (0.7)
 
 Output your plan as JSON matching this schema:
 {format_instructions}""",
@@ -328,7 +379,7 @@ DJ Style: {dj_style}""",
                 transition_type="smooth_blend",
                 effects=[
                     TransitionEffect(
-                        type="filter", start_at=0, duration=8, intensity=0.7
+                        type="filter_sweep", start_at=0, duration=8, intensity=0.8
                     )
                 ],
                 crossfade_duration=8.0,

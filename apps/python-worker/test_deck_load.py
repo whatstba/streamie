@@ -2,6 +2,7 @@
 
 import asyncio
 import sys
+import pytest
 
 sys.path.append("/Users/lynscott/Projects/streamie/apps/python-worker")
 
@@ -9,6 +10,7 @@ from models import init_db
 from services.deck_manager import DeckManager
 
 
+@pytest.mark.asyncio
 async def test_load_track():
     print("Testing deck load directly...")
 

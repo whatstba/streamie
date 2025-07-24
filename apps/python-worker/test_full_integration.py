@@ -5,7 +5,6 @@ import json
 import time
 import asyncio
 import websockets
-from typing import Dict, List
 
 BASE_URL = "http://localhost:8000"
 
@@ -320,7 +319,7 @@ async def test_websocket_analysis_stream():
             data = json.loads(message)
             assert data["type"] == "connected"
             assert data["deck_id"] == "A"
-    except Exception as e:
+    except Exception:
         # WebSocket might timeout if no active analysis
         pass
 

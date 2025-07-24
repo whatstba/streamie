@@ -2,8 +2,7 @@
 
 import librosa
 import numpy as np
-import json
-from typing import Dict, List, Tuple, Optional
+from typing import Dict
 import soundfile as sf
 import logging
 

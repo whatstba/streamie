@@ -98,7 +98,7 @@ def test_mix_coordination_with_decks():
         mix_decision = result.get("mix_decision")
 
         if mix_decision:
-            print(f"\nMix Decision:")
+            print("\nMix Decision:")
             print(f"  Action: {mix_decision.get('action')}")
             print(f"  Source: Deck {mix_decision.get('source_deck')}")
             print(f"  Target: Deck {mix_decision.get('target_deck')}")
@@ -116,7 +116,7 @@ def test_mix_coordination_with_decks():
             # Show EQ adjustments
             eq_adjustments = mix_decision.get("eq_adjustments", {})
             if eq_adjustments:
-                print(f"\n  EQ Adjustments:")
+                print("\n  EQ Adjustments:")
                 for deck, eq in eq_adjustments.items():
                     print(
                         f"    Deck {deck}: Low={eq['low']:.2f}, Mid={eq['mid']:.2f}, High={eq['high']:.2f}"
@@ -124,7 +124,7 @@ def test_mix_coordination_with_decks():
 
             # Show compatibility
             compatibility = result.get("compatibility", {})
-            print(f"\n  Compatibility:")
+            print("\n  Compatibility:")
             print(f"    Overall: {compatibility.get('overall', 0):.2f}")
             print(f"    BPM: {compatibility.get('bpm', 0):.2f}")
             print(f"    Key: {compatibility.get('key', 0):.2f}")

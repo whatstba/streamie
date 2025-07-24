@@ -1,14 +1,12 @@
 """Music library management service"""
 
-import os
-import asyncio
 from pathlib import Path
-from typing import List, Dict, Optional
+from typing import List, Dict
 from sqlalchemy import select, and_, or_, func
 import logging
 import json
 
-from models.database import Track, init_db, get_session
+from models.database import Track, get_session
 from tools.analyzers import TrackAnalyzer
 from utils.mood_interpreter import interpret_mood
 

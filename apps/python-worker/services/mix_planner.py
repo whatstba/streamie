@@ -1,8 +1,7 @@
 """Mix planning service - plans track order and transitions"""
 
 import logging
-from typing import List, Dict, Tuple, Optional
-import numpy as np
+from typing import List, Dict
 from models.database import Track
 
 logger = logging.getLogger(__name__)

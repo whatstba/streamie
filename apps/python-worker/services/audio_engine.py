@@ -5,21 +5,19 @@ Audio Engine Service - Real-time audio mixing engine that bridges deck/mixer sta
 import asyncio
 import logging
 import numpy as np
-from typing import Dict, Optional, List, Tuple, AsyncGenerator
+from typing import Dict, Optional, Tuple, AsyncGenerator
 import time
-from datetime import datetime
 import threading
 import queue
 from dataclasses import dataclass
 from concurrent.futures import ThreadPoolExecutor
 import os
 import librosa
-import soundfile as sf
 
 from services.deck_manager import DeckManager
 from services.mixer_manager import MixerManager
 from services.effect_manager import EffectManager
-from models.effect_models import ActiveEffect, EffectState
+from models.effect_models import EffectState
 from models.mix_models import EffectType
 
 logger = logging.getLogger(__name__)
@@ -97,7 +95,7 @@ class AudioEngine:
         self._audio_queue = queue.Queue(maxsize=50)
         self._running = False
         self._processing_lock = threading.Lock()
-        
+
         # Thread pool for CPU-intensive operations
         self._thread_pool = ThreadPoolExecutor(max_workers=4)
 
@@ -133,8 +131,7 @@ class AudioEngine:
         self._processing_thread.start()
 
         # Start sync task - don't wait for it
-        # DISABLED: Causing infinite loop with deck state checks
-        # self._sync_task = asyncio.create_task(self._sync_loop())
+        self._sync_task = asyncio.create_task(self._sync_loop())
 
         logger.info("🎵 AudioEngine started")
 
@@ -175,22 +172,26 @@ class AudioEngine:
                 # Try relative to music directory (Downloads)
                 music_dir = os.path.expanduser("~/Downloads")
                 file_path = os.path.join(music_dir, filepath)
-                
+
                 # If not found, try current directory
                 if not os.path.exists(file_path):
                     file_path = os.path.abspath(filepath)
-                
+
                 # If still not found, try Music folder
                 if not os.path.exists(file_path):
                     music_path = os.path.expanduser(f"~/Music/{filepath}")
                     if os.path.exists(music_path):
                         file_path = music_path
-            
+
             # Verify file exists
             if not os.path.exists(file_path):
                 logger.error(f"🎵 File not found: {file_path}")
-                return {"status": "error", "error": f"File not found: {filepath}", "deck_id": deck_id}
-            
+                return {
+                    "status": "error",
+                    "error": f"File not found: {filepath}",
+                    "deck_id": deck_id,
+                }
+
             # Check cache first (use original filepath as key)
             with self._cache_lock:
                 if filepath in self._audio_cache:
@@ -199,15 +200,12 @@ class AudioEngine:
                 else:
                     # Load audio file asynchronously
                     logger.info(f"🎵 Loading track: {file_path}")
-                    
+
                     # Run librosa.load in thread pool to avoid blocking
                     loop = asyncio.get_event_loop()
                     audio_data, sr = await loop.run_in_executor(
                         self._thread_pool,
-                        librosa.load,
-                        file_path,  # Use resolved absolute path
-                        self.sample_rate,
-                        False  # mono=False
+                        lambda: librosa.load(file_path, sr=self.sample_rate, mono=False)
                     )
 
                     # Convert to stereo if mono
@@ -532,6 +530,10 @@ class AudioEngine:
         # Sync each deck
         for deck_id in ["A", "B", "C", "D"]:
             try:
+                # Only sync if deck manager is available
+                if not self.deck_manager:
+                    continue
+                    
                 deck_state = await self.deck_manager.get_deck_state(deck_id)
                 if deck_state:
                     with self._processing_lock:
@@ -547,6 +549,8 @@ class AudioEngine:
                         audio_deck.eq_low = deck_state.get("eq_low", 0.0)
                         audio_deck.eq_mid = deck_state.get("eq_mid", 0.0)
                         audio_deck.eq_high = deck_state.get("eq_high", 0.0)
+                        
+                        # Remove spammy logging
 
                         # Load track if needed
                         if (
@@ -555,9 +559,7 @@ class AudioEngine:
                         ):
                             # Track changed, load new one
                             # Skip loading during sync to avoid blocking
-                            logger.info(
-                                f"🎵 Track change detected for deck {deck_id}, skipping auto-load"
-                            )
+                            pass
 
                         # Update position if significantly different
                         if audio_deck.audio_data is not None:
@@ -592,17 +594,54 @@ class AudioEngine:
             return self._audio_queue.get_nowait()
         except queue.Empty:
             return None
+    
+    def clear_audio_queue(self):
+        """Clear all buffers from the audio queue"""
+        cleared_count = 0
+        try:
+            while True:
+                self._audio_queue.get_nowait()
+                cleared_count += 1
+        except queue.Empty:
+            pass
+        
+        if cleared_count > 0:
+            logger.info(f"🎵 Cleared {cleared_count} buffers from audio queue")
+        return cleared_count
 
     async def get_stream_generator(self) -> AsyncGenerator[np.ndarray, None]:
         """Async generator for audio streaming"""
+        logger.info(f"🎵 get_stream_generator called, _running={self._running}")
+        
+        if not self._running:
+            logger.error("🎵 AudioEngine is not running in get_stream_generator!")
+            # Yield at least one buffer of silence to prevent hanging
+            silence = np.zeros((2, self.buffer_size), dtype=np.float32)
+            yield silence
+            return
+            
+        consecutive_silence = 0
+        max_silence_buffers = 1000  # About 10 seconds of silence before giving up
+        
         while self._running:
             buffer = self.get_audio_stream()
             if buffer is not None:
+                consecutive_silence = 0
+                # Got audio buffer
                 yield buffer
             else:
                 # Generate silence if no audio available
                 silence = np.zeros((2, self.buffer_size), dtype=np.float32)
                 yield silence
+                consecutive_silence += 1
+                
+                # Remove spammy logging
+                
+                # Prevent infinite silence generation
+                if consecutive_silence > max_silence_buffers:
+                    logger.error("🎵 Too many consecutive silence buffers, stopping stream")
+                    break
+                    
                 await asyncio.sleep(0.01)
 
     def get_deck_position(self, deck_id: str) -> float:

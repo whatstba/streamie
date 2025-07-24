@@ -5,6 +5,7 @@ import json
 import time
 import asyncio
 import websockets
+import pytest
 
 BASE_URL = "http://localhost:8000"
 
@@ -127,6 +128,7 @@ def test_deck_analysis_integration():
     print("=" * 50)
 
 
+@pytest.mark.asyncio
 async def test_websocket_streaming():
     """Test WebSocket streaming for real-time analysis updates"""
     print("\n" + "=" * 50)

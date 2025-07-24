@@ -5,17 +5,15 @@ Analysis Service for background audio processing and task management.
 import asyncio
 import logging
 import uuid
-from typing import Dict, List, Optional, Any
+from typing import Dict, Optional
 from datetime import datetime
 from dataclasses import dataclass
 from enum import Enum
 import json
 import sqlite3
-import os
 
 from utils.enhanced_analyzer import EnhancedTrackAnalyzer
 from utils.librosa import analyze_track
-import numpy as np
 
 logger = logging.getLogger(__name__)
 

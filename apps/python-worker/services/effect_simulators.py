@@ -6,7 +6,6 @@ Each simulator calculates parameter values over time for testing and visualizati
 import math
 from abc import ABC, abstractmethod
 from typing import Dict, Optional
-import numpy as np
 
 from models.mix_models import EffectType
 from models.effect_models import AutomationCurve

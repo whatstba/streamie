@@ -5,19 +5,15 @@ import json
 import logging
 import sqlite3
 import os
-from typing import Optional, Dict, List, Tuple
+from typing import Optional, Dict, List
 from datetime import datetime
 import numpy as np
 import librosa
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from models import Deck, DeckHistory, Track, MixerState, DeckStatus, SyncMode
+from models import Deck, DeckHistory, MixerState, DeckStatus, SyncMode
 from models.database import get_session
 from tools.dj_toolset import DJToolset
-from utils.enhanced_analyzer import EnhancedTrackAnalyzer
-from services.mixer_manager import MixerManager
-from services.analysis_service import AnalysisService
 
 logger = logging.getLogger(__name__)
 

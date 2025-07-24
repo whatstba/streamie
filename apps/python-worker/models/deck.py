@@ -12,7 +12,6 @@ from sqlalchemy import (
     Enum,
 )
 from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
 from datetime import datetime
 import enum
 

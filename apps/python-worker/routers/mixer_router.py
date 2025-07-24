@@ -4,7 +4,7 @@ Mixer Router - API endpoints for mixer control and monitoring.
 
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
-from typing import List, Dict, Optional, Any
+from typing import Dict, Optional, Any
 import logging
 
 from models import init_db

@@ -1,13 +1,10 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React from 'react';
 import { useAudioPlayer } from '@/context/AudioPlayerContext';
 
 const ProgressBar: React.FC = () => {
-  const { currentTime, duration, seek } = useAudioPlayer();
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragTime, setDragTime] = useState(0);
-  const progressRef = useRef<HTMLDivElement>(null);
+  const { isServerStreaming, playbackStatus, djSet, audioRef } = useAudioPlayer();
 
   const formatTime = (time: number): string => {
     if (!time || isNaN(time)) return '0:00';
@@ -18,123 +15,51 @@ const ProgressBar: React.FC = () => {
   };
 
   const getProgress = (): number => {
-    if (!duration) return 0;
-    const time = isDragging ? dragTime : currentTime;
-    return (time / duration) * 100;
+    if (!isServerStreaming || !playbackStatus || !djSet) return 0;
+    return ((playbackStatus.elapsed_time || 0) / djSet.total_duration) * 100;
   };
 
-  const handleMouseDown = (e: React.MouseEvent) => {
-    if (!progressRef.current || !duration) return;
-
-    const rect = progressRef.current.getBoundingClientRect();
-    const percent = (e.clientX - rect.left) / rect.width;
-    const time = percent * duration;
-
-    setIsDragging(true);
-    setDragTime(time);
+  const handleProgressClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isServerStreaming || !djSet || !audioRef.current) return;
+    
+    const progressBar = e.currentTarget;
+    const rect = progressBar.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const clickPercent = x / rect.width;
+    const seekTime = clickPercent * djSet.total_duration;
+    
+    // Seek to the clicked position
+    audioRef.current.currentTime = seekTime;
+    console.log(`Seeking to ${seekTime}s (${(clickPercent * 100).toFixed(1)}%)`);
   };
 
-  const handleMouseMove = (e: MouseEvent) => {
-    if (!isDragging || !progressRef.current || !duration) return;
-
-    const rect = progressRef.current.getBoundingClientRect();
-    const percent = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    const time = percent * duration;
-
-    setDragTime(time);
-  };
-
-  const handleMouseUp = () => {
-    if (isDragging) {
-      seek(dragTime);
-      setIsDragging(false);
-    }
-  };
-
-  // Handle mouse events on document when dragging
-  React.useEffect(() => {
-    if (isDragging) {
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
-
-      return () => {
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
-      };
-    }
-  }, [isDragging, dragTime, duration]);
-
-  // Handle keyboard navigation
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (!duration) return;
-
-    const currentDisplayTime = isDragging ? dragTime : currentTime;
-
-    switch (e.key) {
-      case 'ArrowLeft':
-        e.preventDefault();
-        seek(Math.max(0, currentDisplayTime - 5));
-        break;
-      case 'ArrowRight':
-        e.preventDefault();
-        seek(Math.min(duration, currentDisplayTime + 5));
-        break;
-      case 'Home':
-        e.preventDefault();
-        seek(0);
-        break;
-      case 'End':
-        e.preventDefault();
-        seek(duration);
-        break;
-    }
-  };
+  if (!isServerStreaming || !playbackStatus || !djSet) {
+    return (
+      <div className="flex items-center gap-2 w-full max-w-md">
+        <span className="text-xs text-gray-400 w-10 text-right">0:00</span>
+        <div className="flex-1 h-1 bg-zinc-700 rounded-full" />
+        <span className="text-xs text-gray-400 w-10">0:00</span>
+      </div>
+    );
+  }
 
   return (
-    <div className="w-full max-w-md space-y-1">
-      {/* Progress Bar */}
-      <div
-        ref={progressRef}
-        className="relative h-2 bg-zinc-800 rounded-full cursor-pointer group"
-        onMouseDown={handleMouseDown}
-        onKeyDown={handleKeyDown}
-        tabIndex={0}
-        role="slider"
-        aria-valuemin={0}
-        aria-valuemax={duration || 0}
-        aria-valuenow={isDragging ? dragTime : currentTime}
-        aria-label="Track progress"
-        title="Click to seek, use arrow keys to navigate"
+    <div className="flex items-center gap-2 w-full max-w-md">
+      <span className="text-xs text-gray-400 w-10 text-right">
+        {formatTime(playbackStatus.elapsed_time || 0)}
+      </span>
+      <div 
+        className="flex-1 h-1 bg-zinc-700 rounded-full relative cursor-pointer hover:h-2 transition-all"
+        onClick={handleProgressClick}
       >
-        {/* Progress Fill */}
         <div
-          className="absolute top-0 left-0 h-full bg-white rounded-full transition-all duration-100"
+          className="absolute top-0 left-0 h-full bg-white rounded-full transition-all duration-300 pointer-events-none"
           style={{ width: `${getProgress()}%` }}
         />
-
-        {/* Hover Effect */}
-        <div className="absolute inset-0 bg-white/20 rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
-
-        {/* Dragging Thumb */}
-        {isDragging && (
-          <div
-            className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow-lg"
-            style={{ left: `${getProgress()}%`, transform: 'translate(-50%, -50%)' }}
-          />
-        )}
-
-        {/* Hover Thumb */}
-        <div
-          className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-          style={{ left: `${getProgress()}%`, transform: 'translate(-50%, -50%)' }}
-        />
       </div>
-
-      {/* Time Display */}
-      <div className="flex justify-between text-xs text-gray-400 px-1">
-        <span className="tabular-nums">{formatTime(isDragging ? dragTime : currentTime)}</span>
-        <span className="tabular-nums">{formatTime(duration)}</span>
-      </div>
+      <span className="text-xs text-gray-400 w-10">
+        {formatTime(djSet.total_duration)}
+      </span>
     </div>
   );
 };

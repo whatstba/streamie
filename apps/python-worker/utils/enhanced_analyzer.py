@@ -5,7 +5,7 @@ import json
 import logging
 import librosa
 import numpy as np
-from typing import Dict, List, Optional, Generator, Tuple
+from typing import Dict, List, Optional, Generator
 import essentia.standard as es
 import asyncio
 from dataclasses import dataclass

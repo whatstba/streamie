@@ -8,7 +8,6 @@ from sqlalchemy.ext.asyncio import (
     AsyncAttrs,
 )
 from sqlalchemy.orm import DeclarativeBase, relationship
-from sqlalchemy.sql import func
 from datetime import datetime
 
 

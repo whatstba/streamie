@@ -3,13 +3,10 @@
 import asyncio
 import logging
 import math
-from typing import Optional, Dict, List, Tuple
+from typing import Optional, Dict, Tuple
 from datetime import datetime
-import numpy as np
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from models import MixerState, Deck, DeckStatus
+from models import MixerState, Deck
 from models.database import get_session
 
 logger = logging.getLogger(__name__)

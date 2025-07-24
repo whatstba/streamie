@@ -5,6 +5,7 @@ Test script for the new LangGraph-based DJ Agent
 import asyncio
 import sys
 import os
+import pytest
 
 # Load environment variables
 from dotenv import load_dotenv
@@ -17,6 +18,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from agents.dj_agent import DJAgent
 
 
+@pytest.mark.asyncio
 async def test_agent():
     """Test the DJ agent's capabilities"""
 

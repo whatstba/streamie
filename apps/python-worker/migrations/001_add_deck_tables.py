@@ -12,7 +12,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from sqlalchemy import text
 from models import init_db, get_session
-from models.deck import Deck, DeckHistory, MixerState, DeckStatus
+from models.deck import Deck, MixerState, DeckStatus
 
 
 async def upgrade():

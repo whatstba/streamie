@@ -4,15 +4,14 @@ Transition Executor Service - Executes mix plans with precise timing and coordin
 
 import asyncio
 import logging
-from typing import Dict, Optional, Callable, Any, Set
-from datetime import datetime, timedelta
+from typing import Optional, Callable, Set
+from datetime import datetime
 import numpy as np
 
 from models.mix_models import (
     MixDecision,
     TransitionState,
     TransitionEffect,
-    EQAdjustment,
 )
 from services.deck_manager import DeckManager
 from services.mixer_manager import MixerManager

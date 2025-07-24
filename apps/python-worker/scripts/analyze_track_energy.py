@@ -252,7 +252,7 @@ class EnergyAnalyzer:
                     )
                 else:
                     error_count += 1
-                    logger.error(f"  ✗ Failed to update database")
+                    logger.error("  ✗ Failed to update database")
 
                 # Show ETA every 10 tracks
                 if i % 10 == 0:
@@ -261,7 +261,7 @@ class EnergyAnalyzer:
             # Summary
             elapsed_total = time.time() - start_time
             logger.info("=" * 60)
-            logger.info(f"Energy analysis complete!")
+            logger.info("Energy analysis complete!")
             logger.info(f"  Total tracks: {total_tracks}")
             logger.info(f"  Successfully analyzed: {success_count}")
             logger.info(f"  Estimated from metadata: {estimated_count}")

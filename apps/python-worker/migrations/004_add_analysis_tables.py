@@ -4,7 +4,6 @@ Migration to add analysis task tracking tables.
 
 import sqlite3
 import os
-from datetime import datetime
 
 
 def migrate():

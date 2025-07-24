@@ -5,14 +5,9 @@ Test Effect Manager - Comprehensive tests for the effects system.
 import pytest
 import pytest_asyncio
 import asyncio
-from datetime import datetime
-import time
 
 from models.effect_models import (
-    ActiveEffect,
-    EffectState,
     AutomationCurve,
-    DeckEffectChain,
 )
 from models.mix_models import TransitionEffect, EffectType
 from services.effect_manager import EffectManager

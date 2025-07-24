@@ -7,7 +7,7 @@ from typing import List, Dict, Any, Optional
 from pydantic import BaseModel, Field
 import logging
 
-from models.effect_models import EffectState, EffectEvent, AutomationCurve, ActiveEffect
+from models.effect_models import EffectState, EffectEvent, AutomationCurve
 from models.mix_models import TransitionEffect, EffectType
 from services.service_manager import service_manager
 from services.effect_manager import EffectManager

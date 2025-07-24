@@ -5,9 +5,8 @@ Simulates effect execution without actual audio processing.
 
 import asyncio
 import logging
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional
 from datetime import datetime
-import uuid
 
 from models.effect_models import (
     ActiveEffect,
@@ -16,7 +15,7 @@ from models.effect_models import (
     EffectEvent,
     AutomationCurve,
 )
-from models.mix_models import TransitionEffect, EffectType
+from models.mix_models import TransitionEffect
 from services.effect_simulators import create_simulator
 
 logger = logging.getLogger(__name__)

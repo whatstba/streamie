@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",
-    "framer-motion": "^12.23.6",
+    "framer-motion": "^12.23.7",
     "next": "15.3.2",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
