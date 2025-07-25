@@ -12,6 +12,7 @@ from utils.dj_llm import DJLLMService, TransitionPlan, TransitionEffect
 from utils.sqlite_db import get_sqlite_db
 import sqlite3
 import os
+import json
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -48,6 +49,7 @@ class DJSetService:
         duration_minutes: int = 30,
         energy_pattern: str = "wave",
         name: Optional[str] = None,
+        track_length_seconds: Optional[int] = None,
     ) -> DJSet:
         """Generate a complete DJ set with pre-planned transitions"""
         
@@ -56,6 +58,8 @@ class DJSetService:
             f"🎵 Generating DJ set: '{vibe_description}' ({duration_minutes} min)"
         )
         logger.info(f"   Energy pattern: {energy_pattern}")
+        if track_length_seconds:
+            logger.info(f"   Track length limit: {track_length_seconds} seconds")
         logger.info(f"   Started at: {start_time.isoformat()}")
 
         # Let the AI determine the optimal number of tracks based on the vibe and duration
@@ -127,7 +131,7 @@ class DJSetService:
         logger.info("⏱️ Calculating set timing and deck assignments...")
         timing_start = datetime.now()
         dj_set_tracks, dj_set_transitions = await self._calculate_set_timing(
-            tracks_with_metadata, transitions, duration_minutes * 60
+            tracks_with_metadata, transitions, duration_minutes * 60, track_length_seconds
         )
         timing_duration = (datetime.now() - timing_start).total_seconds()
         logger.info(f"✅ Calculated timing for {len(dj_set_tracks)} tracks in {timing_duration:.1f}s")
@@ -171,6 +175,17 @@ class DJSetService:
         # Store the DJ set in memory
         self._dj_sets[set_id] = dj_set
         
+        # Pre-render the audio immediately after generation
+        logger.info(f"🎵 Pre-rendering audio for DJ set: {set_name}")
+        try:
+            from services.service_manager import service_manager
+            audio_prerenderer = await service_manager.get_audio_prerenderer()
+            await audio_prerenderer.prerender_dj_set(dj_set)
+            logger.info(f"✅ Audio pre-rendering started successfully")
+        except Exception as e:
+            logger.error(f"❌ Failed to start audio pre-rendering: {e}")
+            # Continue anyway - audio will be rendered on demand
+        
         # Log total generation time
         total_generation_time = (datetime.now() - start_time).total_seconds()
         logger.info(f"📊 Total generation time: {total_generation_time:.1f}s")
@@ -212,6 +227,17 @@ class DJSetService:
                 track["playlist_energy"] = item.get(
                     "energy", track.get("energy_level", 0.5)
                 )
+                
+                # Parse hot_cues JSON if present
+                if track.get("hot_cues") and isinstance(track["hot_cues"], str):
+                    try:
+                        track["hot_cues"] = json.loads(track["hot_cues"])
+                    except (json.JSONDecodeError, TypeError):
+                        track["hot_cues"] = []
+                        logger.warning(f"   ⚠️ Failed to parse hot_cues for: {track.get('title', filepath)}")
+                else:
+                    track["hot_cues"] = []
+                
                 tracks_with_metadata.append(track)
                 logger.debug(f"   ✓ Loaded metadata for: {track.get('title', filepath)}")
             else:
@@ -225,6 +251,49 @@ class DJSetService:
             logger.warning(f"   ⚠️ {len(missing_tracks)} tracks not found in database")
 
         return tracks_with_metadata
+    
+    def _extract_mix_cue_points(self, track: Dict) -> Tuple[float, float]:
+        """Extract Mix In and Mix Out times from hot cues.
+        
+        Returns:
+            Tuple of (mix_in_time, mix_out_time) in seconds
+        """
+        hot_cues = track.get("hot_cues", [])
+        
+        mix_in_time = None
+        mix_out_time = None
+        
+        # Look for specific Mix In/Out cues
+        for cue in hot_cues:
+            cue_name = cue.get("name", "").lower()
+            if "mix in" in cue_name or cue_name == "intro":
+                mix_in_time = cue.get("time", 0.0)
+                logger.debug(f"   🎯 Found Mix In cue at {mix_in_time:.1f}s")
+            elif "mix out" in cue_name or cue_name == "outro":
+                mix_out_time = cue.get("time")
+                logger.debug(f"   🎯 Found Mix Out cue at {mix_out_time:.1f}s")
+        
+        # Get track duration for fallback calculations
+        duration = track.get("duration", 240.0)
+        
+        # Fallback to intelligent defaults if cues not found
+        if mix_in_time is None:
+            # Default to 10% in (typically after intro)
+            mix_in_time = duration * 0.1
+            logger.debug(f"   📐 Using default Mix In at {mix_in_time:.1f}s (10% of track)")
+            
+        if mix_out_time is None:
+            # Default to 90% out (before outro)
+            mix_out_time = duration * 0.9
+            logger.debug(f"   📐 Using default Mix Out at {mix_out_time:.1f}s (90% of track)")
+        
+        # Ensure mix_out is after mix_in
+        if mix_out_time <= mix_in_time:
+            logger.warning(f"   ⚠️ Invalid cue points: mix_out ({mix_out_time}) <= mix_in ({mix_in_time}), using defaults")
+            mix_in_time = duration * 0.1
+            mix_out_time = duration * 0.9
+            
+        return mix_in_time, mix_out_time
 
 
     async def _calculate_set_timing(
@@ -232,6 +301,7 @@ class DJSetService:
         tracks: List[Dict],
         transitions: List[Union[TransitionPlan, Dict]],
         target_duration: float,
+        track_length_seconds: Optional[int] = None,
     ) -> Tuple[List[DJSetTrack], List[DJSetTransition]]:
         """Calculate exact timing for all tracks and transitions"""
 
@@ -251,14 +321,33 @@ class DJSetService:
         current_time = 0.0
 
         for i, track in enumerate(tracks):
-            # Get track duration (in seconds)
-            track_duration = track.get("duration", 240.0)  # Default 4 min
+            # Get hot cue points for this track
+            mix_in_time, mix_out_time = self._extract_mix_cue_points(track)
+            
+            # Calculate effective duration based on hot cues
+            full_duration = track.get("duration", 240.0)
+            hot_cue_duration = mix_out_time - mix_in_time
+            
+            # Log hot cue usage
+            logger.info(f"   🎯 Track {i+1} hot cues: Mix In at {mix_in_time:.1f}s, Mix Out at {mix_out_time:.1f}s")
+            logger.info(f"      Effective duration: {hot_cue_duration:.1f}s (was {full_duration:.1f}s full)")
+            
+            # Apply track length limit if specified (to hot cue duration)
+            if track_length_seconds and hot_cue_duration > track_length_seconds:
+                logger.info(f"   Limiting track {i+1} from {hot_cue_duration:.1f}s to {track_length_seconds}s")
+                # Adjust mix_out_time to respect the limit
+                mix_out_time = mix_in_time + track_length_seconds
+                hot_cue_duration = track_length_seconds
 
             # Assign deck
             deck = deck_assignment[i]
 
-            # Calculate start and end times
+            # Calculate start and end times in the mix
             start_time = current_time
+            
+            # Store hot cue info for later use
+            track["mix_in_time"] = mix_in_time
+            track["mix_out_time"] = mix_out_time
 
             # For transitions, we need overlap
             if i < len(transitions):
@@ -270,9 +359,9 @@ class DJSetService:
                 else:
                     overlap_duration = transition.crossfade_duration
 
-                # The track plays fully but starts fading out during transition
-                fade_out_time = start_time + track_duration - overlap_duration
-                end_time = start_time + track_duration
+                # The track plays from hot cue in to hot cue out, fading during transition
+                fade_out_time = start_time + hot_cue_duration - overlap_duration
+                end_time = start_time + hot_cue_duration
 
                 # Next track starts during the overlap
                 if i == 0:
@@ -284,8 +373,8 @@ class DJSetService:
             else:
                 # Last track - no transition out
                 fade_in_time = start_time if i == 0 else start_time
-                fade_out_time = start_time + track_duration - 10  # 10s fade at end
-                end_time = start_time + track_duration
+                fade_out_time = start_time + hot_cue_duration - 10  # 10s fade at end
+                end_time = start_time + hot_cue_duration
 
             # Create DJSetTrack
             dj_track = DJSetTrack(
@@ -304,6 +393,11 @@ class DJSetService:
                 mixing_note=track.get("mixing_note", ""),
                 tempo_adjust=0.0,  # Can be calculated based on BPM matching
                 gain_adjust=1.0,
+                eq_low=0.0,
+                eq_mid=0.0,
+                eq_high=0.0,
+                hot_cue_in_offset=mix_in_time,  # Where to start in the audio file
+                hot_cue_out_offset=mix_out_time,  # Where to end in the audio file
             )
 
             dj_set_tracks.append(dj_track)
@@ -316,7 +410,19 @@ class DJSetService:
                 # Handle both TransitionPlan objects and dictionaries
                 if isinstance(transition, dict):
                     # Extract properties from dictionary
-                    effects_data = transition.get("effects", [])
+                    # CRITICAL FIX: Effects are nested under "effect_plan" in AI output
+                    effect_plan = transition.get("effect_plan", {})
+                    effects_data = effect_plan.get("effects", [])
+                    
+                    # Log the extraction for debugging
+                    logger.info(f"   📦 Extracting effects from transition {i+1}:")
+                    logger.info(f"      Raw transition keys: {list(transition.keys())}")
+                    if "effect_plan" in transition:
+                        logger.info(f"      Effect plan keys: {list(effect_plan.keys())}")
+                        logger.info(f"      Found {len(effects_data)} effects: {[e.get('type', 'unknown') for e in effects_data if isinstance(e, dict)]}")
+                    else:
+                        logger.warning(f"      ⚠️ No effect_plan found in transition!")
+                    
                     crossfade_duration = transition.get("crossfade_duration", 8.0)
                     transition_type = transition.get("transition_type", "smooth_fade")
                     technique_notes = transition.get("technique_notes", "")
@@ -333,37 +439,54 @@ class DJSetService:
 
                 # Validate and fix effects with proper error handling
                 validated_effects = []
-                for effect in effects_data:
+                logger.info(f"   🔍 Validating {len(effects_data)} effects for transition {i+1}")
+                
+                for effect_idx, effect in enumerate(effects_data):
                     try:
                         if isinstance(effect, TransitionEffect):
                             validated_effects.append(effect)
+                            logger.info(f"      ✅ Effect {effect_idx+1}: {effect.type} (already validated)")
                         elif isinstance(effect, dict):
                             # Ensure all required fields exist with defaults
+                            effect_type = effect.get('type', 'filter_sweep')
                             effect_dict = {
-                                'type': effect.get('type', 'filter'),
+                                'type': effect_type,
                                 'start_at': float(effect.get('start_at', 0.0)),
                                 'duration': float(effect.get('duration', 3.0)),
-                                'intensity': float(effect.get('intensity', 0.3))
+                                'intensity': float(effect.get('intensity', 0.5))  # Increased default intensity
                             }
-                            validated_effects.append(TransitionEffect(**effect_dict))
+                            validated_effect = TransitionEffect(**effect_dict)
+                            validated_effects.append(validated_effect)
+                            logger.info(f"      ✅ Effect {effect_idx+1}: {effect_type} validated (intensity={effect_dict['intensity']})")
                         else:
-                            logger.warning(f"Unknown effect type: {type(effect)}")
+                            logger.warning(f"      ⚠️ Unknown effect type: {type(effect)}")
                             # Add default effect as fallback
                             validated_effects.append(TransitionEffect(
-                                type='filter',
+                                type='filter_sweep',
                                 start_at=0.0,
                                 duration=3.0,
-                                intensity=0.3
+                                intensity=0.5
                             ))
                     except Exception as e:
-                        logger.error(f"Failed to validate effect: {e}")
+                        logger.error(f"      ❌ Failed to validate effect {effect_idx+1}: {e}")
+                        logger.error(f"         Raw effect data: {effect}")
                         # Add a default effect as fallback
                         validated_effects.append(TransitionEffect(
-                            type='filter',
+                            type='filter_sweep',
                             start_at=0.0,
                             duration=3.0,
-                            intensity=0.3
+                            intensity=0.5
                         ))
+                
+                logger.info(f"   📦 Total validated effects: {len(validated_effects)}")
+                if len(validated_effects) == 0:
+                    logger.warning(f"   ⚠️ No effects validated! Adding default filter_sweep")
+                    validated_effects.append(TransitionEffect(
+                        type='filter_sweep',
+                        start_at=0.0,
+                        duration=crossfade_duration,
+                        intensity=0.7
+                    ))
 
                 dj_transition = DJSetTransition(
                     from_track_order=i + 1,

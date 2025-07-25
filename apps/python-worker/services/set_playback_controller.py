@@ -81,15 +81,56 @@ class SetPlaybackController:
             
         return effect_type
 
+    async def register_for_playback(self, dj_set: DJSet) -> str:
+        """Register a DJ set for playback tracking without starting it"""
+        set_id = dj_set.id
+
+        # Check if already registered
+        if set_id in self._active_sessions:
+            logger.warning(f"🎮 Set {set_id} is already registered")
+            return set_id
+
+        logger.info(f"🎮 Registering DJ set for playback: {dj_set.name}")
+
+        # Create playback state but don't start it
+        playback_state = self.dj_set_service.create_playback_state(dj_set)
+        playback_state.is_playing = False  # Not playing yet
+        playback_state.started_at = None    # Will be set when actually started
+
+        # Create session lock
+        self._session_locks[set_id] = asyncio.Lock()
+
+        # Start playback task (for state tracking, not actual audio)
+        session_task = asyncio.create_task(self._playback_loop(dj_set, playback_state))
+        self._active_sessions[set_id] = session_task
+
+        logger.info(f"🎮 Registered DJ set for playback: {dj_set.name}")
+        return set_id
+
     async def start_playback(self, dj_set: DJSet) -> str:
         """Start playing a DJ set"""
 
         set_id = dj_set.id
 
-        # Check if already playing
+        # Check if already registered (not necessarily playing)
         if set_id in self._active_sessions:
-            logger.warning(f"🎮 Set {set_id} is already playing")
-            return set_id
+            # Get existing playback state
+            state = self.dj_set_service.get_playback_state(set_id)
+            if state:
+                # Check if it's actually playing or just registered
+                if state.is_playing:
+                    logger.warning(f"🎮 Set {set_id} is already playing")
+                    return set_id
+                else:
+                    # Activate the pre-registered playback
+                    logger.info(f"🎮 Activating playback for pre-registered set: {dj_set.name}")
+                    state.is_playing = True
+                    state.started_at = datetime.now()
+                    # The existing _playback_loop will detect this change and start playing
+                    return set_id
+            else:
+                # State not found, continue with normal flow
+                logger.warning(f"🎮 Set {set_id} in sessions but no state found, recreating...")
 
         # Note: Pre-rendering is now done before this method is called
         logger.info(f"🎮 Starting playback for pre-rendered DJ set: {dj_set.name}")
@@ -148,13 +189,22 @@ class SetPlaybackController:
         if not state or not state.is_playing:
             return False
 
-        self.dj_set_service.update_playback_state(set_id, is_paused=True)
+        # Store the backend elapsed time at pause
+        current_backend_time = asyncio.get_event_loop().time()
+        backend_elapsed = current_backend_time - getattr(state, 'backend_start_time', current_backend_time)
+        
+        self.dj_set_service.update_playback_state(
+            set_id, 
+            is_paused=True,
+            backend_pause_time=current_backend_time,
+            backend_pause_elapsed=backend_elapsed
+        )
 
         # Pause active decks
         for deck_id in state.active_decks:
             await self.deck_manager.update_deck_state(deck_id, {"is_playing": False})
 
-        logger.info(f"🎮 Paused playback of set {set_id}")
+        logger.info(f"🎮 Paused playback of set {set_id} at {backend_elapsed:.1f}s")
         return True
 
     async def resume_playback(self, set_id: str) -> bool:
@@ -164,23 +214,53 @@ class SetPlaybackController:
         if not state or not state.is_paused:
             return False
 
-        self.dj_set_service.update_playback_state(set_id, is_paused=False)
+        # Adjust backend timing after pause
+        current_backend_time = asyncio.get_event_loop().time()
+        pause_duration = current_backend_time - getattr(state, 'backend_pause_time', current_backend_time)
+        
+        # Update backend start time to account for pause duration
+        if hasattr(state, 'backend_start_time'):
+            state.backend_start_time += pause_duration
+        
+        self.dj_set_service.update_playback_state(
+            set_id, 
+            is_paused=False,
+            backend_start_time=getattr(state, 'backend_start_time', current_backend_time)
+        )
 
         # Resume active decks
         for deck_id in state.active_decks:
             await self.deck_manager.update_deck_state(deck_id, {"is_playing": True})
 
-        logger.info(f"🎮 Resumed playback of set {set_id}")
+        logger.info(f"🎮 Resumed playback of set {set_id} after {pause_duration:.1f}s pause")
         return True
+
 
     async def _playback_loop(self, dj_set: DJSet, state: DJSetPlaybackState):
         """Main playback loop for a DJ set"""
 
         set_id = dj_set.id
-        start_time = time.time()
+        last_elapsed = 0.0  # Track last elapsed time to detect updates
 
         try:
             logger.info(f"🎮 Starting playback loop for {dj_set.name}")
+
+            # Wait for playback to be activated
+            while not state.is_playing:
+                logger.debug(f"🎮 Waiting for playback activation for {dj_set.name}...")
+                await asyncio.sleep(0.5)
+                
+                # Check if the task was cancelled
+                if not self._active_sessions.get(set_id):
+                    logger.info(f"🎮 Playback loop cancelled for {dj_set.name}")
+                    return
+
+            logger.info(f"🎮 Playback activated for {dj_set.name}")
+            
+            # Set start time - track both backend time and frontend elapsed time
+            state.started_at = datetime.now()
+            state.elapsed_time = 0.0  # Initialize elapsed time
+            state.backend_start_time = asyncio.get_event_loop().time()  # Backend timing reference
 
             # Pre-load first track
             first_track = dj_set.tracks[0]
@@ -237,9 +317,21 @@ class SetPlaybackController:
                 while state.is_paused:
                     await asyncio.sleep(0.1)
 
-                # Update elapsed time
-                current_time = time.time()
-                state.elapsed_time = current_time - start_time
+                # Calculate effective elapsed time (frontend or backend fallback)
+                current_backend_time = asyncio.get_event_loop().time()
+                backend_elapsed = current_backend_time - getattr(state, 'backend_start_time', current_backend_time)
+                
+                # Use frontend time if it's been updated recently, otherwise use backend time
+                time_since_last_update = (datetime.now() - state.last_update).total_seconds()
+                if time_since_last_update > 2.0 and state.is_playing and not state.is_paused:
+                    # Use backend timing as fallback
+                    state.elapsed_time = backend_elapsed
+                    logger.debug(f"🎮 Using backend timing: {backend_elapsed:.1f}s (no frontend update for {time_since_last_update:.1f}s)")
+                
+                # Log if elapsed time changed (for debugging)
+                if state.elapsed_time != last_elapsed:
+                    logger.debug(f"🎮 Elapsed time: {last_elapsed:.1f} -> {state.elapsed_time:.1f}")
+                    last_elapsed = state.elapsed_time
 
                 # Get current and next tracks
                 current_track_idx = state.current_track_order - 1
@@ -430,11 +522,22 @@ class SetPlaybackController:
                 if transition_task.done():
                     break
 
-                # Update progress (rough estimate based on time)
-                elapsed = time.time() - (
-                    state.started_at.timestamp() + transition.start_time
-                )
-                state.transition_progress = min(1.0, elapsed / transition.duration)
+                # Update progress based on elapsed time (frontend or backend fallback)
+                # Use backend timing if frontend hasn't updated recently
+                current_backend_time = asyncio.get_event_loop().time()
+                backend_elapsed = current_backend_time - getattr(state, 'backend_start_time', current_backend_time)
+                
+                # Use frontend time if it's been updated recently, otherwise use backend time
+                time_since_last_update = (datetime.now() - state.last_update).total_seconds()
+                if time_since_last_update > 2.0:  # No frontend update for 2 seconds
+                    # Use backend timing as fallback
+                    effective_elapsed = backend_elapsed if state.is_playing and not state.is_paused else state.elapsed_time
+                else:
+                    effective_elapsed = state.elapsed_time
+                
+                # The transition starts at transition.start_time, so calculate progress from there
+                transition_elapsed = effective_elapsed - transition.start_time
+                state.transition_progress = min(1.0, max(0.0, transition_elapsed / transition.duration))
 
                 await asyncio.sleep(0.1)
 

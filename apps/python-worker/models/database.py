@@ -1,5 +1,6 @@
 """Database models for DJ system"""
 
+import asyncio
 from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Text
 from sqlalchemy.ext.asyncio import (
     create_async_engine,
@@ -122,4 +123,15 @@ class get_session:
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         if self.session:
-            await self.session.close()
+            try:
+                if exc_type is not None:
+                    # If there was an exception, rollback
+                    await self.session.rollback()
+                await self.session.close()
+            except asyncio.CancelledError:
+                # If cancelled during cleanup, still try to close
+                try:
+                    await self.session.close()
+                except:
+                    pass  # Best effort close
+                raise  # Re-raise the CancelledError

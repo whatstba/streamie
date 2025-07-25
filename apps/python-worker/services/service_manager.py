@@ -15,6 +15,7 @@ from services.effect_manager import EffectManager
 from services.audio_engine import AudioEngine
 from services.dj_set_service import DJSetService
 from services.set_playback_controller import SetPlaybackController
+from services.audio_prerenderer import AudioPrerenderer
 from agents.mix_coordinator_agent import MixCoordinatorAgent
 from models.database import init_db
 
@@ -34,6 +35,7 @@ class ServiceManager:
     _transition_executor: Optional[TransitionExecutor] = None
     _dj_set_service: Optional[DJSetService] = None
     _set_playback_controller: Optional[SetPlaybackController] = None
+    _audio_prerenderer: Optional[AudioPrerenderer] = None
     _engine = None
     _initialization_started = False
     _initialization_complete = False
@@ -146,6 +148,14 @@ class ServiceManager:
             )
             logger.info("✅ Set playback controller initialized")
 
+            # 12. Initialize audio prerenderer
+            self._audio_prerenderer = AudioPrerenderer(
+                deck_manager=self._deck_manager,
+                mixer_manager=self._mixer_manager,
+                effect_manager=self._effect_manager,
+            )
+            logger.info("✅ Audio prerenderer initialized")
+
             self._initialization_complete = True
             logger.info("✅ All services initialized successfully")
 
@@ -199,6 +209,11 @@ class ServiceManager:
         await self.initialize_all_services()
         return self._set_playback_controller
 
+    async def get_audio_prerenderer(self) -> AudioPrerenderer:
+        """Get or create the singleton AudioPrerenderer instance"""
+        await self.initialize_all_services()
+        return self._audio_prerenderer
+
     async def shutdown(self):
         """Shutdown all managed services"""
         logger.info("🛑 Shutting down services...")
@@ -223,6 +238,12 @@ class ServiceManager:
             await self._analysis_service.stop()
             self._analysis_service = None
             logger.info("✅ Analysis service stopped")
+
+        # Cleanup audio prerenderer
+        if self._audio_prerenderer is not None:
+            self._audio_prerenderer.cleanup()
+            self._audio_prerenderer = None
+            logger.info("✅ Audio prerenderer cleaned up")
 
         # Reset other services
         self._deck_manager = None

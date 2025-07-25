@@ -24,19 +24,9 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/audio", tags=["audio"])
 
 
-# Global prerenderer instance
-prerenderer: Optional[AudioPrerenderer] = None
-
-
 async def get_prerenderer() -> AudioPrerenderer:
-    """Get or create the audio prerenderer"""
-    global prerenderer
-    if prerenderer is None:
-        deck_manager = await service_manager.get_deck_manager()
-        mixer_manager = await service_manager.get_mixer_manager()
-        effect_manager = await service_manager.get_effect_manager()
-        prerenderer = AudioPrerenderer(deck_manager, mixer_manager, effect_manager)
-    return prerenderer
+    """Get the audio prerenderer from service manager"""
+    return await service_manager.get_audio_prerenderer()
 
 
 class AudioStreamConfig(BaseModel):
@@ -360,19 +350,24 @@ async def stream_audio_chunked(
 @router.get("/stream/file/{set_id}")
 async def get_rendered_audio_file(
     set_id: str,
-    chunked_streamer: ChunkedAudioStreamer = Depends(get_chunked_audio_streamer)
+    prerenderer: AudioPrerenderer = Depends(get_prerenderer)
 ):
     """
     Get the pre-rendered audio file if available.
     Returns 404 if still rendering.
     """
-    filepath = chunked_streamer.get_rendered_file(set_id)
+    filepath = prerenderer.get_rendered_file(set_id)
     
     if not filepath or not os.path.exists(filepath):
-        raise HTTPException(
-            status_code=404,
-            detail="Audio file not ready yet"
-        )
+        # Also check chunked streamer as fallback
+        chunked_streamer = ChunkedAudioStreamer(await service_manager.get_audio_engine())
+        filepath = chunked_streamer.get_rendered_file(set_id)
+        
+        if not filepath or not os.path.exists(filepath):
+            raise HTTPException(
+                status_code=404,
+                detail="Audio file not ready yet"
+            )
     
     # Get file size
     file_size = os.path.getsize(filepath)

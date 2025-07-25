@@ -35,6 +35,10 @@ class DJSetTrack(BaseModel):
     eq_low: float = Field(default=0.0, description="Low EQ adjustment")
     eq_mid: float = Field(default=0.0, description="Mid EQ adjustment")
     eq_high: float = Field(default=0.0, description="High EQ adjustment")
+    
+    # Hot cue information
+    hot_cue_in_offset: float = Field(default=0.0, description="Offset in seconds to start of hot cue in point")
+    hot_cue_out_offset: float = Field(default=0.0, description="Offset in seconds to hot cue out point")
 
 
 class DJSetTransition(BaseModel):
@@ -142,3 +146,6 @@ class DJSetPlaybackState(BaseModel):
     # Timestamps
     started_at: Optional[datetime] = None
     last_update: datetime = Field(default_factory=datetime.now)
+    
+    # Backend timing reference (for accurate elapsed time tracking)
+    backend_start_time: Optional[float] = None

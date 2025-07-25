@@ -10,6 +10,7 @@ const AudioControls: React.FC = () => {
     isLoading, 
     currentTrack, 
     isServerStreaming,
+    isReadyToPlay,
     pauseDJSet,
     resumeDJSet,
     stopDJSet,
@@ -17,17 +18,27 @@ const AudioControls: React.FC = () => {
     error,
   } = useAudioPlayer();
 
+  // Debug logging (only in development)
+  if (process.env.NODE_ENV === 'development') {
+    console.log('AudioControls state:', {
+      isLoading,
+      isServerStreaming,
+      currentTrack: !!currentTrack,
+      isReadyToPlay,
+      buttonDisabled: isLoading || (!isServerStreaming && !currentTrack && !isReadyToPlay)
+    });
+  }
+
   const handlePlayPause = () => {
-    if (isServerStreaming) {
+    console.log('handlePlayPause called', { isServerStreaming, isReadyToPlay, isPlaying, error });
+    
+    if (isServerStreaming || isReadyToPlay) {
       if (isPlaying) {
         pauseDJSet();
       } else {
-        // If there's an error, try manual play first
-        if (error) {
-          manualPlay();
-        } else {
-          resumeDJSet();
-        }
+        // For initial play of a DJ set, always use manualPlay
+        // because resumeDJSet expects the backend to already be playing
+        manualPlay();
       }
     } else {
       // Regular track playback - use manualPlay which handles the audio element
@@ -63,11 +74,13 @@ const AudioControls: React.FC = () => {
 
         <button
           onClick={handlePlayPause}
-          disabled={isLoading || (!isServerStreaming && !currentTrack)}
+          disabled={isLoading || (!isServerStreaming && !currentTrack && !isReadyToPlay)}
           className={`p-2 rounded-full hover:scale-105 transition disabled:opacity-50 disabled:cursor-not-allowed ${
-            error ? 'bg-yellow-500 hover:bg-yellow-400' : 'bg-white'
-          }`}
-          title={error ? 'Click to retry playback' : (isPlaying ? 'Pause' : 'Play')}
+            error ? 'bg-yellow-500 hover:bg-yellow-400' : 
+            isReadyToPlay ? 'bg-green-500 hover:bg-green-400 animate-pulse' : 
+            'bg-white'
+          } ${isReadyToPlay ? 'scale-110' : ''}`}
+          title={error ? 'Click to retry playback' : isReadyToPlay ? 'Click to start DJ set' : (isPlaying ? 'Pause' : 'Play')}
         >
           {isLoading ? (
             <div className="h-6 w-6 text-black flex items-center justify-center">
@@ -80,6 +93,12 @@ const AudioControls: React.FC = () => {
           )}
         </button>
       </div>
+      
+      {isReadyToPlay && !error && (
+        <div className="text-xs text-green-400 max-w-xs text-center mt-2 animate-pulse">
+          Click play to start your DJ set!
+        </div>
+      )}
       
       {error && (
         <div className="text-xs text-red-400 max-w-xs text-center mt-2">

@@ -16,6 +16,8 @@ const Player = () => {
     isServerStreaming,
     playbackStatus,
     djSet,
+    isReadyToPlay,
+    wsConnected,
   } = useAudioPlayer();
 
   const formatTime = (seconds: number): string => {
@@ -26,7 +28,12 @@ const Player = () => {
   };
 
   return (
-    <div className="h-24 bg-zinc-900 border-t border-zinc-800 px-4 relative">
+    <div className={`h-24 bg-zinc-900 border-t border-zinc-800 px-4 relative ${isReadyToPlay ? 'ring-2 ring-green-500 ring-opacity-50' : ''}`}>
+      {/* Ready to Play Indicator */}
+      {isReadyToPlay && !isServerStreaming && (
+        <div className="absolute top-0 left-0 right-0 h-1 bg-green-500 animate-pulse" />
+      )}
+      
       {/* Server Streaming Progress Indicator */}
       {isServerStreaming && playbackStatus && djSet && (
         <div className="absolute top-0 left-0 right-0 h-1 bg-zinc-800">
@@ -42,6 +49,16 @@ const Player = () => {
       <div className="max-w-screen-xl mx-auto h-full flex items-center justify-between gap-6">
         {/* Left Side - DJ Set Status */}
         <div className="flex-1 min-w-0 max-w-sm">
+          {isReadyToPlay && !isServerStreaming && djSet && (
+            <div className="space-y-2">
+              <div className="text-sm font-medium text-green-400">
+                DJ Set Ready: {djSet.name || 'Custom Mix'}
+              </div>
+              <div className="text-xs text-gray-400">
+                {djSet.track_count} tracks • {Math.round(djSet.total_duration / 60)} minutes
+              </div>
+            </div>
+          )}
           {isServerStreaming && playbackStatus && djSet && (
             <div className="space-y-2">
               <div className="text-sm font-medium">
@@ -74,6 +91,15 @@ const Player = () => {
 
         {/* Right Side Controls */}
         <div className="flex items-center gap-4 flex-1 max-w-sm justify-end">
+          {/* WebSocket Connection Status */}
+          {isServerStreaming && (
+            <div className="flex items-center gap-2 text-xs">
+              <div className={`w-2 h-2 rounded-full ${wsConnected ? 'bg-green-500' : 'bg-yellow-500 animate-pulse'}`} />
+              <span className="text-zinc-500 hidden lg:inline">
+                {wsConnected ? 'Live' : 'Connecting'}
+              </span>
+            </div>
+          )}
           <VolumeControl />
           <QueueManager />
           <KeyboardShortcutsHelp />

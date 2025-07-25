@@ -513,13 +513,13 @@ class AudioEngine:
                 current_time = time.time()
                 if current_time - self._last_sync_time >= self._sync_interval:
                     # Use timeout to prevent hanging
-                    await asyncio.wait_for(self._sync_states(), timeout=5.0)
+                    await asyncio.wait_for(self._sync_states(), timeout=15.0)
                     self._last_sync_time = current_time
 
                 await asyncio.sleep(0.05)
 
             except asyncio.TimeoutError:
-                logger.warning("🎵 Sync states timed out")
+                logger.warning("🎵 Sync states timed out after 15s - deck manager may be busy")
                 self._last_sync_time = time.time()
             except Exception as e:
                 logger.error(f"🎵 Sync error: {e}")

@@ -10,6 +10,7 @@ from langgraph.prebuilt import ToolNode
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
 from langchain_openai import ChatOpenAI
 from langchain_core.tools import tool
+from pydantic import BaseModel, Field
 import numpy as np
 import logging
 import json
@@ -17,7 +18,7 @@ import sqlite3
 import os
 
 from utils.sqlite_db import get_sqlite_db
-from utils.dj_llm import DJLLMService, VibeAnalysis, TrackEvaluation
+from utils.dj_llm import DJLLMService, VibeAnalysis
 
 # Configure logging for the DJ agent
 logger = logging.getLogger("DJAgent")
@@ -31,6 +32,33 @@ formatter = logging.Formatter(
 )
 console_handler.setFormatter(formatter)
 logger.addHandler(console_handler)
+
+
+# Pydantic models for tool inputs
+class SearchTracksInput(BaseModel):
+    """Input for searching tracks by vibe."""
+    vibe_description: str = Field(description="Description of the vibe or mood to search for")
+    limit: int = Field(default=50, description="Maximum number of tracks to return")
+
+
+class GetTrackDetailsInput(BaseModel):
+    """Input for getting track details."""
+    filepath: str = Field(description="Filepath of the track to get details for")
+
+
+class FilterTracksByEnergyInput(BaseModel):
+    """Input for filtering tracks by energy level."""
+    tracks: List[Dict] = Field(description="List of tracks to filter (each track is a dictionary with title, artist, filepath, etc.)")
+    target_energy: float = Field(description="Target energy level (0-1)")
+    tolerance: float = Field(default=0.2, description="Acceptable deviation from target energy")
+
+
+class FinalizePlaylistInput(BaseModel):
+    """Input for finalizing the playlist."""
+    selected_tracks: List[Dict] = Field(description="List of selected tracks for the playlist")
+    duration_minutes: int = Field(description="Target duration in minutes")
+    energy_pattern: str = Field(default="wave", description="Energy pattern for the playlist")
+    vibe_description: str = Field(description="Description of the vibe for the playlist")
 
 
 class DJAgentState(TypedDict):
@@ -374,8 +402,8 @@ async def analyze_transition_compatibility(
     return compatibility
 
 
-@tool
-async def search_tracks_by_vibe(vibe_keywords: str, limit: int = 20) -> List[Dict]:
+@tool(args_schema=SearchTracksInput)
+async def search_tracks_by_vibe(vibe_description: str, limit: int = 50) -> List[Dict]:
     """Search for tracks that match the given vibe keywords using AI analysis.
 
     Args:
@@ -386,20 +414,19 @@ async def search_tracks_by_vibe(vibe_keywords: str, limit: int = 20) -> List[Dic
         List of tracks matching the vibe
     """
     logger.info(
-        f"🔍 AI-Powered track search for vibe: '{vibe_keywords}' (limit: {limit})"
+        f"🔍 AI-Powered track search for vibe: '{vibe_description}' (limit: {limit})"
     )
 
     # Initialize DJ LLM service
     dj_service = DJLLMService()
 
-    # Genre mapper no longer needed - AI now uses exact database genres
 
     # Get AI vibe analysis
     try:
-        vibe_analysis = await dj_service.analyze_vibe(vibe_keywords)
+        vibe_analysis = await dj_service.analyze_vibe(vibe_description)
         logger.info(
             f"   🤖 AI Vibe Analysis: Energy={vibe_analysis.energy_level:.2f}, "
-            f"Mood={vibe_analysis.mood_keywords}, BPM={vibe_analysis.bpm_range}"
+            f"Mood={vibe_analysis.mood_keywords}, BPM={vibe_analysis.bpm_range['min']}-{vibe_analysis.bpm_range['max']}"
         )
     except Exception as e:
         logger.error(f"   ❌ AI analysis failed, using fallback: {e}")
@@ -407,7 +434,7 @@ async def search_tracks_by_vibe(vibe_keywords: str, limit: int = 20) -> List[Dic
         vibe_analysis = VibeAnalysis(
             energy_level=0.5,
             energy_progression="steady",
-            mood_keywords=vibe_keywords.lower().split(),
+            mood_keywords=vibe_description.lower().split(),
             genre_preferences=[],  # Empty list means no genre filtering
             bpm_range={"min": 100, "max": 140},
             mixing_style="smooth",
@@ -473,8 +500,8 @@ async def search_tracks_by_vibe(vibe_keywords: str, limit: int = 20) -> List[Dic
     """
 
     logger.debug(f"   📊 Executing AI-driven query: {query}")
-    logger.debug(f"   📊 Query limit: {limit * 2}")
-    cursor.execute(query, (limit * 2,))  # Get extra for AI filtering
+    logger.debug(f"   📊 Query limit: {limit}")
+    cursor.execute(query, (limit,))  # Get extra for AI filtering
 
     columns = [description[0] for description in cursor.description]
     all_tracks = []
@@ -500,31 +527,28 @@ async def search_tracks_by_vibe(vibe_keywords: str, limit: int = 20) -> List[Dic
 
     cursor.close()
 
-    # Let AI evaluate and rank tracks
-    evaluated_tracks = []
-    for track in all_tracks[: limit * 2]:  # Evaluate up to 2x limit
-        try:
-            evaluation = await dj_service.evaluate_track(track, vibe_analysis)
+    # Use batch evaluation for efficiency
+    tracks_to_evaluate = all_tracks[: limit]  # Evaluate up to 2x limit
+    logger.info(f"   🤖 Batch evaluating {len(tracks_to_evaluate)} candidate tracks...")
+    
+    try:
+        # Get all evaluations in one API call
+        evaluations = await dj_service.evaluate_tracks_batch(tracks_to_evaluate, vibe_analysis)
+        
+        # Combine tracks with their evaluations
+        evaluated_tracks = []
+        for track, evaluation in zip(tracks_to_evaluate, evaluations):
             if evaluation.score > 0.3:  # Only include decent matches
                 evaluated_tracks.append({"track": track, "evaluation": evaluation})
-        except Exception:
-            # Fallback: include with default score
-            evaluated_tracks.append(
-                {
-                    "track": track,
-                    "evaluation": TrackEvaluation(
-                        score=0.5,
-                        reasoning="Evaluation skipped",
-                        energy_match=0.5,
-                        suggested_position=None,
-                        mixing_notes="Standard mix",
-                    ),
-                }
-            )
-
-    # Sort by AI score and take top tracks
-    evaluated_tracks.sort(key=lambda x: x["evaluation"].score, reverse=True)
-    final_tracks = [item["track"] for item in evaluated_tracks[:limit]]
+        
+        # Sort by AI score and take top tracks
+        evaluated_tracks.sort(key=lambda x: x["evaluation"].score, reverse=True)
+        final_tracks = [item["track"] for item in evaluated_tracks[:limit]]
+        
+    except Exception as e:
+        logger.error(f"   ❌ Batch evaluation failed: {e}, falling back to all tracks")
+        # Fallback: just use all tracks without AI evaluation
+        final_tracks = all_tracks[:limit]
 
     logger.info(
         f"   📊 AI selected {len(final_tracks)} tracks from {len(all_tracks)} candidates"
@@ -542,12 +566,12 @@ async def search_tracks_by_vibe(vibe_keywords: str, limit: int = 20) -> List[Dic
     return final_tracks
 
 
-@tool
-async def get_track_details(track_filepath: str) -> Dict:
+@tool(args_schema=GetTrackDetailsInput)
+async def get_track_details(filepath: str) -> Dict:
     """Get detailed information about a specific track.
 
     Args:
-        track_filepath: The filepath of the track
+        filepath: The filepath of the track
 
     Returns:
         Detailed track information including BPM, energy, genre, etc.
@@ -600,7 +624,7 @@ async def get_track_details(track_filepath: str) -> Dict:
     # Run in executor
     loop = asyncio.get_event_loop()
     with ThreadPoolExecutor() as executor:
-        result = await loop.run_in_executor(executor, _get_track_sync, track_filepath)
+        result = await loop.run_in_executor(executor, _get_track_sync, filepath)
 
     if not result:
         return {"error": "Track not found"}
@@ -617,7 +641,7 @@ async def get_track_details(track_filepath: str) -> Dict:
     return track
 
 
-@tool
+@tool(args_schema=FilterTracksByEnergyInput)
 async def filter_tracks_by_energy(
     tracks: List[Dict], target_energy: float, tolerance: float = 0.2
 ) -> List[Dict]:
@@ -647,7 +671,6 @@ async def filter_tracks_by_energy(
     logger.info(f"🎚️ AI filtering {len(validated_tracks)} tracks for energy {target_energy:.2f}")
 
     dj_service = DJLLMService()
-    filtered = []
 
     # Create a simple vibe analysis for the target energy
     target_vibe = VibeAnalysis(
@@ -659,6 +682,7 @@ async def filter_tracks_by_energy(
         mixing_style="smooth",
     )
 
+    # Estimate energy for all tracks first
     for track in validated_tracks:
         # Always estimate energy since database values might be NULL
         # TODO: Store calculated energy values back to database
@@ -666,16 +690,27 @@ async def filter_tracks_by_energy(
             track.get("bpm"), track.get("genre")
         )
 
-        # Use AI to evaluate if this track matches the target energy
-        try:
-            evaluation = await dj_service.evaluate_track(track, target_vibe)
+    # Use batch evaluation for efficiency
+    logger.info(f"   🤖 Batch evaluating {len(validated_tracks)} tracks for energy match...")
+    
+    try:
+        # Get all evaluations in one API call
+        evaluations = await dj_service.evaluate_tracks_batch(validated_tracks, target_vibe)
+        
+        # Filter based on energy match
+        filtered = []
+        for track, evaluation in zip(validated_tracks, evaluations):
             if evaluation.energy_match > (1 - tolerance):
                 filtered.append(track)
                 logger.debug(
                     f"   ✅ {track.get('title')} - Energy match: {evaluation.energy_match:.2f}"
                 )
-        except Exception:
-            # Fallback to simple comparison
+                
+    except Exception as e:
+        logger.error(f"   ❌ Batch evaluation failed: {e}, using simple energy filtering")
+        # Fallback to simple comparison
+        filtered = []
+        for track in validated_tracks:
             energy = track.get("energy_level", 0.5)
             if abs(energy - target_energy) <= tolerance:
                 filtered.append(track)
@@ -684,18 +719,20 @@ async def filter_tracks_by_energy(
     return filtered
 
 
-@tool
+@tool(args_schema=FinalizePlaylistInput)
 async def finalize_playlist(
-    track_filepaths: List[str],
-    mixing_notes: Optional[List[str]] = None,
-    vibe_description: Optional[str] = None,
+    selected_tracks: List[Dict],
+    duration_minutes: int,
+    energy_pattern: str = "wave",
+    vibe_description: str = "",
 ) -> Dict:
     """Finalize the playlist with AI-powered professional curation and flow analysis.
 
     Args:
-        track_filepaths: List of track filepaths for the final playlist
-        mixing_notes: Optional list of mixing notes for each track
-        vibe_description: Optional description of the desired vibe
+        selected_tracks: List of selected tracks for the playlist
+        duration_minutes: Target duration in minutes
+        energy_pattern: Energy pattern for the playlist
+        vibe_description: Description of the vibe for the playlist
 
     Returns:
         Dictionary with success status and AI-enhanced playlist details
@@ -704,6 +741,9 @@ async def finalize_playlist(
     import sqlite3
     import os
 
+    # Extract filepaths from selected tracks
+    track_filepaths = [track.get('filepath', '') for track in selected_tracks if track.get('filepath')]
+    
     logger.info(
         f"🎯 Finalizing playlist with {len(track_filepaths)} tracks using AI curation"
     )
@@ -922,9 +962,7 @@ async def finalize_playlist(
             track_entry = {
                 "filepath": filepath,
                 "order": i + 1,
-                "mixing_note": mixing_notes[i]
-                if mixing_notes and i < len(mixing_notes)
-                else f"Track {i + 1}",
+                "mixing_note": f"Track {i + 1}",
             }
             playlist.append(track_entry)
 
@@ -1701,7 +1739,27 @@ What track should I play after {current_track}?"""
             - Energy pattern "{energy_pattern}" (steady patterns allow longer tracks)
             - The vibe and context provided
             
-            Aim for a natural flow that fits the duration without rushing or dragging."""
+            Aim for a natural flow that fits the duration without rushing or dragging.
+            
+            Use the available tools to:
+            1. Search for tracks matching the vibe using search_tracks_by_vibe(vibe_description="...", limit=50)
+            2. Get detailed track information using get_track_details(filepath="...")
+            3. If you need to filter tracks by energy, you MUST provide the tracks list: 
+               filter_tracks_by_energy(tracks=[list of track dictionaries], target_energy=0.5, tolerance=0.2)
+               IMPORTANT: The 'tracks' parameter is REQUIRED and must be a list of track dictionaries
+
+            IMPORTANT RULES: 
+            - You MUST ONLY use tracks that are returned by the search_tracks_by_vibe tool
+            - NEVER create fake track names like "track_001.mp3" or similar
+            - Select UNIQUE tracks only - do not include the same track multiple times
+            - After selecting your tracks, you MUST call the finalize_playlist tool with:
+              * selected_tracks: List of track dictionaries from your search results
+              * duration_minutes: Target duration (use {duration_minutes})
+              * energy_pattern: The energy pattern (use "{energy_pattern}")
+              * vibe_description: The vibe description
+
+            The finalize_playlist tool is required to complete the playlist creation.
+            Your task is NOT complete until you have called finalize_playlist with REAL tracks."""
         else:
             system_content = f"""You are a professional DJ assistant. 
             Create a {length}-track playlist based on the following vibe description: "{vibe_description}"
@@ -1714,9 +1772,11 @@ What track should I play after {current_track}?"""
             - wave: Alternate between high and low energy
 
             Use the available tools to:
-            1. Search for tracks matching the vibe using search_tracks_by_vibe
-            2. Get detailed track information using get_track_details if needed
-            3. If you need to filter tracks by energy: filter_tracks_by_energy(tracks=<list of tracks>, target_energy=<0-1>, tolerance=<optional>)
+            1. Search for tracks matching the vibe using search_tracks_by_vibe(vibe_description="...", limit=50)
+            2. Get detailed track information using get_track_details(filepath="...")
+            3. If you need to filter tracks by energy, you MUST provide the tracks list: 
+               filter_tracks_by_energy(tracks=[list of track dictionaries], target_energy=0.5, tolerance=0.2)
+               IMPORTANT: The 'tracks' parameter is REQUIRED and must be a list of track dictionaries
 
             IMPORTANT RULES: 
             - You MUST ONLY use tracks that are returned by the search_tracks_by_vibe tool
@@ -1724,16 +1784,20 @@ What track should I play after {current_track}?"""
             - ONLY use these exact genres (no variations): African Music, Alternative, Bolero, Brazilian Music, Dance, Electro, Films/Games, Hip-Hop/Rap, Jazz, Latin Music, Pop, R&B, Rap/Hip Hop, Reggae, Reggaeton, Rock, Salsa, Soul & Funk
             - Select UNIQUE tracks only - do not include the same track multiple times
             - After selecting your tracks, you MUST call the finalize_playlist tool with:
-              * A list of track filepaths (exactly {length} UNIQUE tracks from search results)
-              * Mixing notes for each track explaining why it fits and how to mix it
+              * selected_tracks: List of track dictionaries from your search results
+              * duration_minutes: Target duration (use {duration_minutes or 30})
+              * energy_pattern: The energy pattern (use "{energy_pattern}")
+              * vibe_description: The vibe description
 
             The finalize_playlist tool is required to complete the playlist creation.
             Your task is NOT complete until you have called finalize_playlist with REAL tracks.
             
             Example of correct final step:
             finalize_playlist(
-                track_filepaths=["/path/track1.mp3", "/path/track2.mp3", ...],
-                mixing_notes=["High energy opener", "Smooth transition from track 1", ...]
+                selected_tracks=[{{"filepath": "/path/track1.mp3", "title": "...", ...}}, ...],
+                duration_minutes={duration_minutes or 30},
+                energy_pattern="{energy_pattern}",
+                vibe_description="{vibe_description}"
             )"""
 
         user_message = f"Create a {length}-track playlist with {vibe_description}"

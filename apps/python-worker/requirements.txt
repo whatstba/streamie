@@ -38,3 +38,5 @@ httpx>=0.24.0
 faker>=19.0.0
 # File system monitoring
 watchdog>=3.0.0
+# Fix for LibreSSL compatibility on macOS
+urllib3<2.0

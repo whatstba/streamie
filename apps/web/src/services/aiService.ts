@@ -69,6 +69,7 @@ interface DJSetGenerateRequest {
   duration_minutes?: number;
   energy_pattern?: 'steady' | 'building' | 'cooling' | 'wave';
   name?: string;
+  track_length_seconds?: number | null;
 }
 
 interface DJSetTrack {

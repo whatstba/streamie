@@ -209,8 +209,8 @@ class AudioPrerenderer:
             # Echo/delay effect
             delay_ms = parameters.get('delay_time', 250) if parameters else 250
             delay_samples = int(delay_ms * self.sample_rate / 1000)
-            feedback = 0.3 + (intensity * 0.4)
-            mix = intensity * 0.5
+            feedback = 0.4 + (intensity * 0.5)  # Increased feedback
+            mix = 0.3 + (intensity * 0.6)  # Increased mix level
             
             if delay_samples < processed.shape[1]:
                 delayed = np.zeros_like(processed)
@@ -220,7 +220,7 @@ class AudioPrerenderer:
         elif effect_type == 'reverb':
             # Simple reverb using multiple delays
             room_size = 0.3 + (intensity * 0.5)
-            wet_level = intensity * 0.4
+            wet_level = 0.3 + (intensity * 0.5)  # Increased wet level
             
             reverb = np.zeros_like(processed)
             delays = [0.013, 0.027, 0.037, 0.043]  # seconds
@@ -239,8 +239,8 @@ class AudioPrerenderer:
             # Longer delay than echo
             delay_ms = parameters.get('delay_time', 500) if parameters else 500
             delay_samples = int(delay_ms * self.sample_rate / 1000)
-            feedback = 0.4 + (intensity * 0.3)
-            mix = intensity * 0.4
+            feedback = 0.5 + (intensity * 0.4)  # Increased feedback
+            mix = 0.3 + (intensity * 0.5)  # Increased mix level
             
             if delay_samples < processed.shape[1]:
                 delayed = np.zeros_like(processed)
@@ -330,14 +330,14 @@ class AudioPrerenderer:
             
             try:
                 # Design peaking EQ filter
-                sos = signal.iirpeak(center_freq / nyquist, bandwidth)
+                b, a = signal.iirpeak(center_freq / nyquist, bandwidth)
                 
                 # Apply gain
                 gain_linear = 10 ** (gain_db / 20)
                 
                 # Apply filter to each channel
                 for ch in range(processed.shape[0]):
-                    filtered = signal.sosfilt(sos, processed[ch])
+                    filtered = signal.lfilter(b, a, processed[ch])
                     # Mix filtered and original based on intensity
                     processed[ch] = (
                         processed[ch] * (1 - intensity * 0.5) +
@@ -400,19 +400,47 @@ class AudioPrerenderer:
                     track_buffers.append(None)
                     track_timing.append(None)
                     continue
+                
+                # Extract hot cue portion of the track
+                hot_cue_in_sample = int(track.hot_cue_in_offset * self.sample_rate)
+                hot_cue_out_sample = int(track.hot_cue_out_offset * self.sample_rate)
+                
+                # Log hot cue extraction
+                logger.info(f"   🎯 Extracting hot cue region:")
+                logger.info(f"      Mix In: {track.hot_cue_in_offset:.1f}s (sample {hot_cue_in_sample:,})")
+                logger.info(f"      Mix Out: {track.hot_cue_out_offset:.1f}s (sample {hot_cue_out_sample:,})")
+                logger.info(f"      Hot cue duration: {track.hot_cue_out_offset - track.hot_cue_in_offset:.1f}s")
+                
+                # Ensure we don't exceed audio bounds
+                if hot_cue_out_sample > audio.shape[1]:
+                    logger.warning(f"   ⚠️ Hot cue out ({hot_cue_out_sample}) exceeds audio length ({audio.shape[1]}), adjusting")
+                    hot_cue_out_sample = audio.shape[1]
+                
+                # Extract the hot cue region
+                audio = audio[:, hot_cue_in_sample:hot_cue_out_sample]
+                logger.info(f"   ✂️ Extracted {audio.shape[1] / self.sample_rate:.1f}s of audio from hot cues")
                     
-                # Calculate timing
+                # Calculate timing for the mix
                 start_sample = int(track.start_time * self.sample_rate)
                 end_sample = int(track.end_time * self.sample_rate)
                 duration_samples = end_sample - start_sample
                 
-                # Trim audio to match duration
+                # Verify extracted audio matches expected duration
                 if audio.shape[1] > duration_samples:
+                    # Trim if we have more audio than needed
                     audio = audio[:, :duration_samples]
+                    logger.info(f"   ✂️ Trimmed to {duration_samples / self.sample_rate:.1f}s for mix timing")
                 elif audio.shape[1] < duration_samples:
                     # Pad with silence if needed
                     padding = duration_samples - audio.shape[1]
                     audio = np.concatenate([audio, np.zeros((2, padding))], axis=1)
+                    padding_seconds = padding / self.sample_rate
+                    actual_duration = audio.shape[1] / self.sample_rate
+                    expected_duration = duration_samples / self.sample_rate
+                    logger.warning(f"   ⚠️ Hot cue extraction resulted in shorter audio than expected:")
+                    logger.warning(f"      Expected: {expected_duration:.1f}s, Got: {(audio.shape[1] - padding) / self.sample_rate:.1f}s")
+                    logger.warning(f"      Padded with {padding_seconds:.1f}s of silence")
+                    logger.warning(f"      Hot cue range: {track.hot_cue_in_offset:.1f}s - {track.hot_cue_out_offset:.1f}s")
                     
                 # Apply gain
                 audio = audio * track.gain_adjust
@@ -483,6 +511,9 @@ class AudioPrerenderer:
                     transition_duration_samples = int(transition_as_source.duration * self.sample_rate)
                     
                     # Apply crossfade curve to outgoing track
+                    # Keep minimum volume during effects to make them audible
+                    min_volume_during_effects = 0.5  # 50% minimum volume
+                    
                     for j in range(transition_duration_samples):
                         global_sample = transition_start_sample + j
                         local_sample = global_sample - start_sample
@@ -490,17 +521,33 @@ class AudioPrerenderer:
                         if 0 <= local_sample < processed_buffer.shape[1]:
                             progress = j / transition_duration_samples
                             fade_curve = self.apply_crossfade_curve(1.0 - progress, transition_as_source.crossfade_curve)
+                            
+                            # Keep minimum volume if effects are active
+                            if len(transition_as_source.effects) > 0:
+                                fade_curve = max(fade_curve, min_volume_during_effects)
+                            
                             processed_buffer[:, local_sample] *= fade_curve
                             
                     # Apply transition effects to outgoing track
                     for effect_idx, effect in enumerate(transition_as_source.effects):
-                        logger.info(f"      Applying effect {effect_idx + 1}: {effect.type} (intensity={effect.intensity:.2f}, duration={effect.duration}s)")
-                        effect_start = int((transition_as_source.start_time + effect.start_at) * self.sample_rate)
-                        effect_duration = int(effect.duration * self.sample_rate)
+                        # Log detailed effect information
+                        effect_type = effect.type if hasattr(effect, 'type') else str(effect)
+                        effect_intensity = effect.intensity if hasattr(effect, 'intensity') else 0.5
+                        effect_duration = effect.duration if hasattr(effect, 'duration') else 3.0
+                        effect_start_at = effect.start_at if hasattr(effect, 'start_at') else 0.0
+                        
+                        logger.info(f"      🎵 Applying effect {effect_idx + 1}/{len(transition_as_source.effects)}:")
+                        logger.info(f"         Type: {effect_type}")
+                        logger.info(f"         Intensity: {effect_intensity:.2f}")
+                        logger.info(f"         Duration: {effect_duration}s")
+                        logger.info(f"         Start at: {effect_start_at}s (relative to transition)")
+                        
+                        effect_start = int((transition_as_source.start_time + effect_start_at) * self.sample_rate)
+                        effect_duration_samples = int(effect_duration * self.sample_rate)
                         
                         # Calculate the range of samples affected by this effect
                         effect_start_local = effect_start - start_sample
-                        effect_end_local = effect_start_local + effect_duration
+                        effect_end_local = effect_start_local + effect_duration_samples
                         
                         # Ensure we're within buffer bounds
                         if effect_end_local > 0 and effect_start_local < processed_buffer.shape[1]:
@@ -512,17 +559,26 @@ class AudioPrerenderer:
                             audio_segment = processed_buffer[:, valid_start:valid_end]
                             
                             # Calculate progress for the entire effect duration
-                            progress_start = (valid_start - effect_start_local) / effect_duration if effect_duration > 0 else 0
-                            progress_end = (valid_end - effect_start_local) / effect_duration if effect_duration > 0 else 1
+                            progress_start = (valid_start - effect_start_local) / effect_duration_samples if effect_duration_samples > 0 else 0
+                            progress_end = (valid_end - effect_start_local) / effect_duration_samples if effect_duration_samples > 0 else 1
                             
                             # Process the entire segment with the effect
+                            logger.info(f"         🎛️ Processing effect on samples {valid_start}-{valid_end}")
+                            logger.info(f"         Audio segment shape: {audio_segment.shape}")
+                            
                             effected = self.process_transition_effect(
                                 audio_segment,
-                                effect.type,
-                                effect.intensity,
+                                effect_type,
+                                effect_intensity,
                                 (progress_start + progress_end) / 2,  # Average progress for this segment
                                 effect.parameters if hasattr(effect, 'parameters') else None
                             )
+                            
+                            # Log the effect result
+                            logger.info(f"         🎯 Effect applied! Output shape: {effected.shape}")
+                            # Check if effect actually changed the audio
+                            diff = np.abs(effected - audio_segment).mean()
+                            logger.info(f"         Audio difference (effect strength): {diff:.6f}")
                             
                             # Replace the processed segment
                             processed_buffer[:, valid_start:valid_end] = effected
@@ -536,6 +592,9 @@ class AudioPrerenderer:
                     transition_duration_samples = int(transition_as_target.duration * self.sample_rate)
                     
                     # Apply crossfade curve to incoming track
+                    # Keep minimum volume during effects to make them audible
+                    min_volume_during_effects = 0.5  # 50% minimum volume
+                    
                     for j in range(transition_duration_samples):
                         global_sample = transition_start_sample + j
                         local_sample = global_sample - start_sample
@@ -543,6 +602,23 @@ class AudioPrerenderer:
                         if 0 <= local_sample < processed_buffer.shape[1]:
                             progress = j / transition_duration_samples
                             fade_curve = self.apply_crossfade_curve(progress, transition_as_target.crossfade_curve)
+                            
+                            # Keep minimum volume if effects are active (check previous transition)
+                            # Since effects are on the outgoing track, check if we're still in effect range
+                            effect_active = False
+                            if i > 0 and i - 1 < len(dj_set.transitions):
+                                prev_transition = dj_set.transitions[i - 1]
+                                if len(prev_transition.effects) > 0:
+                                    # Check if we're still within effect duration
+                                    for effect in prev_transition.effects:
+                                        effect_end = prev_transition.start_time + effect.start_at + effect.duration
+                                        if transition_as_target.start_time <= effect_end:
+                                            effect_active = True
+                                            break
+                            
+                            if effect_active:
+                                fade_curve = max(fade_curve, min_volume_during_effects)
+                            
                             processed_buffer[:, local_sample] *= fade_curve
                             
                 # Apply standard fade in/out if not part of a transition
@@ -588,8 +664,21 @@ class AudioPrerenderer:
                     effect_types[effect_type].append(f"intensity={effect.intensity:.2f}")
             
             logger.info(f"   Total effects applied: {total_effects}")
+            if total_effects == 0:
+                logger.warning("   ⚠️ NO EFFECTS WERE APPLIED! Check transition data structure.")
             for effect_type, instances in effect_types.items():
                 logger.info(f"   - {effect_type}: {len(instances)} instances ({', '.join(instances[:3])}{'...' if len(instances) > 3 else ''})")
+            
+            # Log supported effect types for reference
+            logger.info("\n📋 Supported effect types:")
+            logger.info("   - filter/filter_sweep: Low-pass filter sweep")
+            logger.info("   - echo: Delay with feedback (250ms)")
+            logger.info("   - reverb: Room simulation")
+            logger.info("   - delay: Long delay (500ms)")
+            logger.info("   - gate: Rhythmic volume cuts")
+            logger.info("   - scratch: DJ scratch effect")
+            logger.info("   - flanger: LFO modulation")
+            logger.info("   - eq_sweep: Sweeping EQ boost")
             
             # Normalize to prevent clipping
             logger.info("\n🔊 Phase 3: Normalizing and encoding...")
