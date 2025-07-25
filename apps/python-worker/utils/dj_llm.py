@@ -11,6 +11,14 @@ import logging
 from functools import lru_cache
 import json
 
+# Import effect types from our standardized definitions
+try:
+    from models.effect_types import DJEffectType, EFFECT_DESCRIPTIONS, EFFECT_INTENSITY_GUIDE, validate_effect_type
+except ImportError:
+    logger.warning("Could not import effect_types, using fallback")
+    DJEffectType = None
+    validate_effect_type = None
+
 logger = logging.getLogger("DJLLMService")
 logger.setLevel(logging.DEBUG)
 
@@ -49,8 +57,11 @@ class TrackEvaluation(BaseModel):
 
 class TransitionEffect(BaseModel):
     """Individual transition effect with required fields"""
-    type: str = Field(description="Effect type: filter, echo, scratch")
-    start_at: float = Field(description="Start time in seconds from transition start", ge=0)
+
+    type: str = Field(description="Effect type: filter_sweep, echo, reverb, delay, gate, flanger, eq_sweep, scratch")
+    start_at: float = Field(
+        description="Start time in seconds from transition start", ge=0
+    )
     duration: float = Field(description="Effect duration in seconds", ge=0.1)
     intensity: float = Field(description="Effect intensity 0-1", ge=0, le=1)
 
@@ -94,21 +105,30 @@ class PlaylistFinalization(BaseModel):
     )
 
 
+class BatchTrackEvaluation(BaseModel):
+    """Batch evaluation results for multiple tracks"""
+    
+    evaluations: List[TrackEvaluation] = Field(
+        description="List of evaluations for each track in the same order as input"
+    )
+
+
 class DJLLMService:
     """Service for AI-powered DJ intelligence"""
 
     def __init__(self):
         # Initialize different models for different tasks
         self.vibe_analyst = ChatOpenAI(model="gpt-4.1-mini", temperature=0.7)
-        self.playlist_finalizer = ChatOpenAI(model="o4-mini", temperature=1)
-        self.transition_master = ChatOpenAI(model="gpt-4.1-mini", temperature=1)
-        self.track_evaluator = ChatOpenAI(model="gpt-4.1-mini", temperature=1)
+        self.playlist_finalizer = ChatOpenAI(model="gpt-4.1-mini", temperature=1)
+        self.transition_master = ChatOpenAI(model="gpt-4.1", temperature=1)
+        self.track_evaluator = ChatOpenAI(model="gpt-4.1-nano", temperature=1)
 
         # JSON output parsers
         self.vibe_parser = JsonOutputParser(pydantic_object=VibeAnalysis)
         self.track_parser = JsonOutputParser(pydantic_object=TrackEvaluation)
         self.transition_parser = JsonOutputParser(pydantic_object=TransitionPlan)
         self.playlist_parser = JsonOutputParser(pydantic_object=PlaylistFinalization)
+        self.batch_track_parser = JsonOutputParser(pydantic_object=BatchTrackEvaluation)
 
     async def analyze_vibe(
         self, vibe_description: str, context: Optional[Dict] = None
@@ -122,10 +142,30 @@ class DJLLMService:
                     """You are a world-class DJ with deep understanding of music, energy, and crowd dynamics.
 Analyze the vibe request and provide detailed guidance for track selection.
 
+AVAILABLE GENRES (you MUST only use these exact genres):
+- African Music
+- Alternative
+- Bolero
+- Brazilian Music
+- Dance
+- Electro
+- Films/Games
+- Hip-Hop/Rap
+- Jazz
+- Latin Music
+- Pop
+- R&B
+- Rap/Hip Hop
+- Reggae
+- Reggaeton
+- Rock
+- Salsa
+- Soul & Funk
+
 Consider:
 - Energy levels and progression throughout the set
 - Mood and emotional journey
-- Genre compatibility and crossover potential
+- Genre compatibility (ONLY use genres from the above list)
 - BPM ranges that work for the vibe
 - Professional mixing techniques
 
@@ -239,6 +279,29 @@ Current Playlist: {playlist_context}""",
                 return TrackEvaluation(**result)
             return result
         except Exception as e:
+            if "Invalid json output" in str(e):
+                logger.error(f"❌ Track evaluation failed with JSON error: {e}")
+                # Try to extract any partial JSON and use defaults
+                try:
+                    # Attempt to extract score if present
+                    error_str = str(e)
+                    if '"score"' in error_str:
+                        import re
+                        score_match = re.search(r'"score":\s*([0-9.]+)', error_str)
+                        score = float(score_match.group(1)) if score_match else 0.5
+                    else:
+                        score = 0.5
+                    
+                    return TrackEvaluation(
+                        score=score,
+                        reasoning="Track evaluated with partial data due to JSON error",
+                        energy_match=score,  # Use score as energy match fallback
+                        suggested_position=None,
+                        mixing_notes="Standard mix approach",
+                    )
+                except Exception:
+                    pass
+            
             logger.error(f"❌ Track evaluation failed: {e}")
             # Basic fallback
             return TrackEvaluation(
@@ -250,7 +313,7 @@ Current Playlist: {playlist_context}""",
             )
 
     async def plan_transition(
-        self, from_track: Dict, to_track: Dict, dj_style: str = "smooth"
+        self, from_track: Dict, to_track: Dict, dj_style: str = "smooth", crossfade_duration: float = 8.0
     ) -> TransitionPlan:
         """Plan a professional transition between tracks"""
 
@@ -263,12 +326,31 @@ Consider BPM compatibility, key matching, energy levels, and create a detailed t
 Think like a professional: phrasing, harmonic mixing, effects timing, and crowd energy.
 
 Your transition should be musically intelligent and technically precise.
+For maximum impact, use effect intensities of 0.7-1.0. Don't be subtle - make the effects audible!
+
+CRITICAL TIMING RULES:
+1. Your effects MUST provide continuous coverage for the ENTIRE crossfade_duration
+2. Include at least one "foundation effect" (typically filter_sweep) that spans the full transition
+3. Additional effects can layer on top but should NOT leave any gaps
+4. If crossfade_duration is 8 seconds, your effects must cover all 8 seconds!
 
 IMPORTANT: Each effect in the effects array MUST include ALL of these fields:
-- type: Effect type (filter, echo, scratch)
+- type: Effect type - choose from: filter_sweep, echo, reverb, delay, gate, flanger, eq_sweep, scratch
 - start_at: Start time in seconds (e.g., 0, 2.5, 4)
-- duration: Duration in seconds (e.g., 3, 5, 8)
-- intensity: Effect intensity from 0 to 1 (e.g., 0.3, 0.7, 1.0)
+- duration: Duration in seconds - ensure total coverage matches crossfade_duration!
+- intensity: Effect intensity from 0 to 1 (recommend 0.7-1.0 for audible effects)
+
+Effect recommendations by genre:
+- House/Techno: filter_sweep (0.8-1.0), reverb (0.7), delay (0.8)
+- Hip-Hop: scratch (0.9), gate (0.8), echo (0.7)
+- Reggae/Dub: echo (0.9), delay (1.0), reverb (0.8)
+- EDM: filter_sweep (1.0), flanger (0.7), gate (0.9)
+- Latin/Afrobeat: eq_sweep (0.8), reverb (0.6), echo (0.7)
+
+EXAMPLE for 8-second crossfade:
+- Foundation: filter_sweep from 0-8 seconds (full coverage)
+- Layer: reverb from 4-8 seconds (adds depth in second half)
+- Layer: echo from 6-8 seconds (builds to climax)
 
 Output your plan as JSON matching this schema:
 {format_instructions}""",
@@ -291,7 +373,7 @@ DJ Style: {dj_style}""",
         from_info = {
             "title": from_track.get("title"),
             "bpm": from_track.get("bpm"),
-            "key": from_track.get("musical_key"),
+            "key": from_track.get("key"),  # Fixed: changed from musical_key to key
             "energy": from_track.get("energy_level"),
             "genre": from_track.get("genre"),
         }
@@ -299,7 +381,7 @@ DJ Style: {dj_style}""",
         to_info = {
             "title": to_track.get("title"),
             "bpm": to_track.get("bpm"),
-            "key": to_track.get("musical_key"),
+            "key": to_track.get("key"),  # Fixed: changed from musical_key to key
             "energy": to_track.get("energy_level"),
             "genre": to_track.get("genre"),
         }
@@ -315,6 +397,37 @@ DJ Style: {dj_style}""",
             )
             # Ensure we return a TransitionPlan instance, not a dict
             if isinstance(result, dict):
+                # Validate effects before returning
+                if "effects" in result and validate_effect_type:
+                    validated_effects = []
+                    for effect in result["effects"]:
+                        if isinstance(effect, dict):
+                            # Validate effect type
+                            effect_type = validate_effect_type(effect.get("type", ""))
+                            if effect_type:
+                                effect["type"] = effect_type.value
+                                validated_effects.append(effect)
+                            else:
+                                logger.warning(f"Invalid effect type: {effect.get('type')}, using filter_sweep")
+                                effect["type"] = "filter_sweep"
+                                validated_effects.append(effect)
+                        else:
+                            validated_effects.append(effect)
+                    result["effects"] = validated_effects
+                
+                # Validate effect coverage
+                crossfade_duration = result.get("crossfade_duration", 8.0)
+                if not self._validate_effect_coverage(result["effects"], crossfade_duration):
+                    logger.warning(f"⚠️ Effects don't cover full transition duration ({crossfade_duration}s), adding foundation effect")
+                    # Add a foundation filter_sweep that covers the entire duration
+                    foundation_effect = {
+                        "type": "filter_sweep",
+                        "start_at": 0.0,
+                        "duration": crossfade_duration,
+                        "intensity": 0.8
+                    }
+                    result["effects"].insert(0, foundation_effect)
+                
                 return TransitionPlan(**result)
             return result
         except Exception as e:
@@ -324,11 +437,13 @@ DJ Style: {dj_style}""",
                 compatibility_score=0.7,
                 transition_type="smooth_blend",
                 effects=[
-                    TransitionEffect(type="filter", start_at=0, duration=8, intensity=0.7)
+                    TransitionEffect(
+                        type="filter_sweep", start_at=0, duration=crossfade_duration, intensity=0.8
+                    )
                 ],
-                crossfade_duration=8.0,
+                crossfade_duration=crossfade_duration,
                 cue_points={"outro_start": 0, "intro_start": 0},
-                technique_notes="Basic crossfade",
+                technique_notes="Basic crossfade with full duration coverage",
                 risk_level="safe",
             )
 
@@ -409,7 +524,7 @@ Additional Context: {context}""",
             json_match = re.search(r"\{[\s\S]*\}", result.content)
             if json_match:
                 effect_plan = json.loads(json_match.group())
-                
+
                 # Validate and ensure all effects have required fields
                 if "effects" in effect_plan:
                     for i, effect in enumerate(effect_plan["effects"]):
@@ -422,12 +537,16 @@ Additional Context: {context}""",
                             effect["duration"] = 4.0
                         if "intensity" not in effect:
                             effect["intensity"] = 0.5
-                            
+
                         # Validate ranges
-                        effect["intensity"] = max(0, min(1, float(effect.get("intensity", 0.5))))
+                        effect["intensity"] = max(
+                            0, min(1, float(effect.get("intensity", 0.5)))
+                        )
                         effect["start_at"] = max(0, float(effect.get("start_at", 0)))
-                        effect["duration"] = max(0.1, float(effect.get("duration", 4.0)))
-                
+                        effect["duration"] = max(
+                            0.1, float(effect.get("duration", 4.0))
+                        )
+
                 logger.info(f"🎛️ AI Effect Design: {effect_plan}")
                 return effect_plan
             else:
@@ -485,7 +604,54 @@ Additional Context: {context}""",
                     "reasoning": "Smooth transition with subtle filter",
                 }
 
-    @lru_cache(maxsize=100)
+    def _validate_effect_coverage(self, effects: List[Dict], crossfade_duration: float) -> bool:
+        """Validate that effects provide continuous coverage for the entire transition."""
+        if not effects:
+            return False
+        
+        # Check if any single effect covers the full duration
+        for effect in effects:
+            if isinstance(effect, dict):
+                start = effect.get("start_at", 0)
+                duration = effect.get("duration", 0)
+                if start == 0 and duration >= crossfade_duration:
+                    return True
+            elif hasattr(effect, "start_at") and hasattr(effect, "duration"):
+                if effect.start_at == 0 and effect.duration >= crossfade_duration:
+                    return True
+        
+        # If no single effect covers full duration, check for continuous coverage
+        # This is more complex but allows for layered effects
+        coverage = []
+        for effect in effects:
+            if isinstance(effect, dict):
+                start = effect.get("start_at", 0)
+                duration = effect.get("duration", 0)
+            elif hasattr(effect, "start_at") and hasattr(effect, "duration"):
+                start = effect.start_at
+                duration = effect.duration
+            else:
+                continue
+            
+            end = start + duration
+            coverage.append((start, end))
+        
+        # Sort by start time
+        coverage.sort(key=lambda x: x[0])
+        
+        # Check if we have continuous coverage from 0 to crossfade_duration
+        if not coverage or coverage[0][0] > 0:
+            return False
+        
+        current_end = 0
+        for start, end in coverage:
+            if start > current_end:
+                # Gap in coverage
+                return False
+            current_end = max(current_end, end)
+        
+        return current_end >= crossfade_duration
+
     def estimate_energy_from_features(
         self, bpm: Optional[float], genre: Optional[str]
     ) -> float:
@@ -619,3 +785,131 @@ Transitions: {transitions}""",
                 set_duration=total_duration / 60,
                 energy_graph=energy_levels,
             )
+
+    async def evaluate_tracks_batch(
+        self,
+        tracks: List[Dict],
+        vibe_analysis: VibeAnalysis,
+        playlist_context: Optional[List[Dict]] = None,
+        max_batch_size: int = 50,
+    ) -> List[TrackEvaluation]:
+        """Evaluate multiple tracks at once for efficiency"""
+        
+        logger.info(f"🎵 Batch evaluating {len(tracks)} tracks for playlist fit")
+        
+        # If too many tracks, process in chunks
+        if len(tracks) > max_batch_size:
+            logger.info(f"   Splitting into chunks of {max_batch_size} tracks")
+            all_evaluations = []
+            for i in range(0, len(tracks), max_batch_size):
+                chunk = tracks[i:i + max_batch_size]
+                chunk_evaluations = await self.evaluate_tracks_batch(
+                    chunk, vibe_analysis, playlist_context, max_batch_size
+                )
+                all_evaluations.extend(chunk_evaluations)
+            return all_evaluations
+        
+        prompt = ChatPromptTemplate.from_messages(
+            [
+                (
+                    "system",
+                    """You are an expert DJ evaluating multiple tracks for a curated playlist.
+For each track, consider its musical elements, energy, mood, and how it fits the overall vibe.
+Think about mixing compatibility, energy flow, and the journey you're creating.
+
+IMPORTANT: You must evaluate ALL tracks provided and return evaluations in the SAME ORDER as input.
+If a track is missing information, still provide an evaluation based on available data.
+
+Output your evaluations as JSON matching this schema:
+{format_instructions}""",
+                ),
+                (
+                    "human",
+                    """Evaluate these tracks for the playlist:
+
+Tracks to evaluate:
+{tracks_info}
+
+Target Vibe: {vibe_info}
+
+Current Playlist Context: {playlist_context}
+
+Remember to return evaluations for ALL {track_count} tracks in the same order!""",
+                ),
+            ]
+        )
+
+        chain = prompt | self.track_evaluator | self.batch_track_parser
+
+        # Prepare tracks info with indices for clarity
+        tracks_info_list = []
+        for i, track in enumerate(tracks):
+            track_info = {
+                "index": i + 1,
+                "title": track.get("title", "Unknown"),
+                "artist": track.get("artist", "Unknown"),
+                "bpm": track.get("bpm"),
+                "key": track.get("musical_key") or track.get("key"),
+                "energy": track.get("energy_level"),
+                "genre": track.get("genre"),
+                "duration": track.get("duration"),
+            }
+            tracks_info_list.append(track_info)
+
+        try:
+            result = await chain.ainvoke(
+                {
+                    "tracks_info": json.dumps(tracks_info_list, indent=2),
+                    "track_count": len(tracks),
+                    "vibe_info": json.dumps(vibe_analysis.model_dump()),
+                    "playlist_context": json.dumps(
+                        [
+                            {
+                                "title": t.get("title"),
+                                "bpm": t.get("bpm"),
+                                "position": i + 1,
+                            }
+                            for i, t in enumerate(playlist_context or [])
+                        ]
+                    ),
+                    "format_instructions": self.batch_track_parser.get_format_instructions(),
+                }
+            )
+            
+            # Ensure we return a list of TrackEvaluation instances
+            if isinstance(result, BatchTrackEvaluation):
+                evaluations = result.evaluations
+            elif isinstance(result, dict) and "evaluations" in result:
+                evaluations = [TrackEvaluation(**e) if isinstance(e, dict) else e for e in result["evaluations"]]
+            else:
+                raise ValueError(f"Unexpected result type: {type(result)}")
+            
+            # Validate we got the right number of evaluations
+            if len(evaluations) != len(tracks):
+                logger.warning(f"   ⚠️ Got {len(evaluations)} evaluations for {len(tracks)} tracks, padding...")
+                # Pad with default evaluations if needed
+                while len(evaluations) < len(tracks):
+                    evaluations.append(TrackEvaluation(
+                        score=0.5,
+                        reasoning="Evaluation missing, using default",
+                        energy_match=0.5,
+                        suggested_position=None,
+                        mixing_notes="Standard mix",
+                    ))
+            
+            logger.info(f"   ✅ Batch evaluation complete: {len(evaluations)} tracks evaluated")
+            return evaluations
+            
+        except Exception as e:
+            logger.error(f"❌ Batch evaluation failed: {e}")
+            # Return default evaluations for all tracks
+            return [
+                TrackEvaluation(
+                    score=0.5,
+                    reasoning="Batch evaluation failed, using defaults",
+                    energy_match=0.5,
+                    suggested_position=None,
+                    mixing_notes="Standard mix",
+                )
+                for _ in tracks
+            ]

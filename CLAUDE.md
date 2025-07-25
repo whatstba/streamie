@@ -49,6 +49,11 @@ The Python backend uses FastAPI with a modular structure:
 - **API Layer** (`main.py`): RESTful endpoints for track management, streaming, and AI features
 - **DJ Agent** (`agents/dj_agent.py`): LangGraph-based intelligent playlist generation with AI-powered track selection and transition planning
 - **DJ LLM Service** (`utils/dj_llm.py`): AI service with specialized personas for vibe analysis, track evaluation, and transition design
+- **DJ Set Service** (`services/dj_set_service.py`): Generates complete DJ sets with pre-planned transitions and timing
+- **Set Playback Controller** (`services/set_playback_controller.py`): Orchestrates automatic playback with track loading and transitions
+- **Audio Engine** (`services/audio_engine.py`): Real-time audio mixing with effects processing
+- **Deck Manager** (`services/deck_manager.py`): Virtual deck management for multi-track mixing
+- **Effect Manager** (`services/effect_manager.py`): Applies DJ effects (filter, echo, scratch) with precise timing
 - **Audio Analysis** (`utils/audio_analyzer.py`): Beat detection and BPM analysis using librosa and essentia
 - **Enhanced Analyzer** (`utils/enhanced_analyzer.py`): Key detection, energy analysis, and structure detection
 - **Database** (`utils/db_adapter.py`): SQLite with comprehensive metadata storage including BPM, key, energy levels
@@ -56,10 +61,13 @@ The Python backend uses FastAPI with a modular structure:
 
 Key API endpoints:
 - `/tracks` - List all tracks with optional BPM filtering
-- `/track/{filepath}/stream` - Audio streaming with range request support
+- `/track/{filepath}/stream` - Individual track streaming with range request support
 - `/track/{filepath}/analysis` - Get BPM, beats, key, and energy analysis
-- `/ai/generate-vibe-playlist` - AI-powered playlist generation with SSE streaming
-- `/ai/generate-vibe-playlist-stream` - Real-time playlist generation updates
+- `/api/dj-set/generate` - Generate complete DJ set with transitions
+- `/api/dj-set/play-immediately` - Generate and start playing DJ set
+- `/api/audio/stream/http` - Stream server-mixed audio with effects
+- `/ai/generate-vibe-playlist` - (Deprecated) Use DJ set generation instead
+- `/ai/generate-vibe-playlist-stream` - (Deprecated) Use DJ set generation instead
 
 ### Frontend Architecture
 The Next.js frontend uses React 19 with TypeScript:
@@ -107,6 +115,12 @@ The Next.js frontend uses React 19 with TypeScript:
 
 ## Recent Changes
 
+### New API Endpoints
+- `/api/dj-set/generate` - Generate a complete DJ set with transitions
+- `/api/dj-set/play-immediately` - Generate and start playing a set
+- `/api/dj-set/playback/status` - Get current playback status
+- `/api/audio/stream/http` - Stream mixed audio output
+
 ### AI Integration
 - Replaced manual calculations with AI-powered intelligence
 - Added structured Pydantic models for LLM outputs
@@ -118,13 +132,14 @@ The Next.js frontend uses React 19 with TypeScript:
 - Added energy level and profile storage
 - Populated all tracks with key and energy data
 
-### Frontend Improvements
+### Frontend Improvements (To Be Updated)
 - Fixed audio gaps during transitions (removed pause())
 - Limited transition effects to 1-2 with lower intensity
 - Added effect tracking to prevent overlaps
 - Fixed NaN% intensity display issues
 - Marked BPM Sync and Hot Cues as "Coming Soon"
 - Removed Home and Liked Songs navigation buttons
+- NOTE: Client-side mixing features are deprecated in favor of server-side mixing
 
 ### Analysis Scripts
 - `analyze_track_keys.py`: Analyzes musical keys for tracks
@@ -137,3 +152,4 @@ The Next.js frontend uses React 19 with TypeScript:
 - Transition effects must include all fields: type, start_at, duration, intensity
 - Use exactly `o4-mini` model name (not o1-mini)
 - Energy levels can be estimated from BPM/genre when audio analysis fails
+- Never use `gpt-3.5 or gpt-4/4o` models only o4-mini for complex tasks and gpt-4.1-mini for quicker tasks

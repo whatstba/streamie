@@ -1,16 +1,16 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import MainLayout from '@/components/layout/MainLayout';
 import VirtualizedTrackList from '@/components/VirtualizedTrackList';
 import DjModeControls from '@/components/player/DjModeControls';
-import AdvancedDjControls from '@/components/player/AdvancedDjControls';
 import PlaylistGenerationUI from '@/components/ai/PlaylistGenerationUI';
 import MusicFolderSetup from '@/components/music-library/MusicFolderSetup';
 import MusicLibrarySettings from '@/components/music-library/MusicLibrarySettings';
 import { SparklesIcon, PlayIcon, Cog6ToothIcon } from '@heroicons/react/24/outline';
 import { musicService } from '@/services/musicService';
 import { musicLibraryService } from '@/services/musicLibraryService';
+import { aiService, type DJSet } from '@/services/aiService';
 import { useAudioPlayer } from '@/context/AudioPlayerContext';
 import { useToast } from '@/context/ToastContext';
 import Image from 'next/image';
@@ -47,6 +47,10 @@ export default function Home() {
   const [isTracklistCollapsed, setIsTracklistCollapsed] = useState(true);
   const [isDjPanelCollapsed, setIsDjPanelCollapsed] = useState(false);
 
+  // Add ref for request debouncing
+  const generateRequestRef = useRef<AbortController | null>(null);
+  const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // New state for enhanced UI
   const [generationStage, setGenerationStage] = useState<
     | 'idle'
@@ -65,6 +69,8 @@ export default function Home() {
     { genres: string[]; energy: number; mood: string } | undefined
   >();
   const [playlistTransitions, setPlaylistTransitions] = useState<any[]>([]);
+  const [currentDJSet, setCurrentDJSet] = useState<DJSet | null>(null);
+  const [trackLengthOption, setTrackLengthOption] = useState<'full' | '30s' | '60s'>('full');
 
   // Music library state
   const [showFirstRunSetup, setShowFirstRunSetup] = useState(false);
@@ -77,15 +83,29 @@ export default function Home() {
     playTrack,
     djMode,
     addToQueue,
-    queue,
-    isTransitioning,
-    nextTrack: upcomingTrack,
     toggleDjMode,
-    setTransitionEffectPlan,
+    playDJSet,
+    isServerStreaming,
+    djSet,
+    playbackStatus,
   } = useAudioPlayer();
 
   // Use toast context
   const { success: showSuccess, error: showError } = useToast();
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      // Clear any pending scroll timer
+      if (scrollTimerRef.current) {
+        clearTimeout(scrollTimerRef.current);
+      }
+      // Cancel any pending generation request
+      if (generateRequestRef.current) {
+        generateRequestRef.current.abort();
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const initializeLibrary = async () => {
@@ -128,26 +148,33 @@ export default function Home() {
     initializeLibrary();
   }, []);
 
-  // Update transition effect plan when current track changes
+  // Track current playback position in DJ set
   useEffect(() => {
-    if (currentTrack && generatedPlaylist.length > 0 && playlistTransitions.length > 0) {
-      // Find the current track index in the generated playlist
-      const currentIndex = generatedPlaylist.findIndex(
-        (track) => track.filepath === currentTrack.filepath
-      );
-
-      if (currentIndex >= 0 && currentIndex < playlistTransitions.length) {
-        const transition = playlistTransitions[currentIndex];
-        if (transition.effect_plan) {
-          setTransitionEffectPlan(transition.effect_plan);
-          console.log(
-            `🎶 Updated transition effect plan for track ${currentIndex + 1}:`,
-            transition.effect_plan
-          );
+    if (isServerStreaming && playbackStatus && djSet) {
+      // Update current track based on playback status
+      const currentTrackOrder = playbackStatus.current_track_order;
+      if (currentTrackOrder !== undefined && currentTrackOrder < djSet.tracks.length) {
+        const track = djSet.tracks[currentTrackOrder];
+        const newCurrentTrack = {
+          filename: track.filepath.split('/').pop() || '',
+          filepath: track.filepath,
+          duration: track.end_time - track.start_time,
+          title: track.title,
+          artist: track.artist,
+          album: track.album || null,
+          genre: track.genre || null,
+          year: null,
+          has_artwork: false,
+          bpm: track.bpm,
+        };
+        
+        // Only update if it's actually different to avoid unnecessary re-renders
+        if (!currentTrack || currentTrack.filepath !== newCurrentTrack.filepath) {
+          console.log(`🎵 Now playing track ${currentTrackOrder + 1} of ${djSet.tracks.length}`);
         }
       }
     }
-  }, [currentTrack, generatedPlaylist, playlistTransitions, setTransitionEffectPlan]);
+  }, [isServerStreaming, playbackStatus, djSet, currentTrack]);
 
   const formatDuration = (duration: number): string => {
     const minutes = Math.floor(duration / 60);
@@ -206,6 +233,15 @@ export default function Home() {
   const handleGenerateVibePlaylist = async () => {
     if (!vibeInput.trim()) return;
 
+    // Cancel any previous request
+    if (generateRequestRef.current) {
+      generateRequestRef.current.abort();
+    }
+
+    // Create new AbortController for this request
+    const abortController = new AbortController();
+    generateRequestRef.current = abortController;
+
     setGeneratingPlaylist(true);
     setAiThinkingMessages([]);
     setGeneratedPlaylist([]);
@@ -214,109 +250,136 @@ export default function Home() {
     setStageProgress(0);
     setFoundTracks([]);
     setDetectedMood(undefined);
+    setCurrentDJSet(null);
 
     try {
-      const eventSource = new EventSource(
-        `http://localhost:8000/ai/generate-vibe-playlist-stream?${new URLSearchParams({
-          vibe_description: vibeInput.trim(),
-          playlist_length: '10',
-        })}`
-      );
+      // Simulate progress stages for UI feedback
+      setStageMessage('Analyzing your vibe description...');
+      setStageProgress(0.2);
+      
+      // Generate the DJ set
+      const trackLengthSeconds = trackLengthOption === 'full' ? null : 
+                                trackLengthOption === '30s' ? 30 : 60;
+      
+      const djSetResponse = await aiService.generateDJSet({
+        vibe_description: vibeInput.trim(),
+        duration_minutes: 30,
+        energy_pattern: 'wave',
+        track_length_seconds: trackLengthSeconds,
+      }, abortController.signal);
 
-      eventSource.onmessage = (event) => {
-        const data = JSON.parse(event.data);
+      if (!djSetResponse.success || !djSetResponse.dj_set) {
+        throw new Error(djSetResponse.error || 'Failed to generate DJ set');
+      }
 
-        // Handle old format for backwards compatibility
-        if (data.type === 'thinking' || data.type === 'status') {
-          setAiThinkingMessages((prev) => [...prev, data.message]);
-          setStageMessage(data.message);
-        }
-        // Handle new enhanced format
-        else if (data.type === 'stage_update') {
-          setGenerationStage(data.stage);
-          setStageNumber(data.stage_number);
-          setStageProgress(data.progress);
-          setStageMessage(data.message);
+      const djSet = djSetResponse.dj_set;
+      setCurrentDJSet(djSet);
 
-          // Handle mood detection data
-          if (data.data && data.data.detected_genres) {
-            setDetectedMood({
-              genres: data.data.detected_genres,
-              energy: data.data.energy_level || 0.5,
-              mood: data.data.mood || 'analyzing',
-            });
-          }
-        } else if (data.type === 'track_found') {
-          setFoundTracks((prev) => [...prev, data.track]);
-          setStageProgress(data.current_count / data.target_count);
-        } else if (data.type === 'optimization') {
-          setStageMessage(data.message);
-          setStageProgress(data.progress);
-        } else if (data.type === 'complete') {
-          setGeneratedPlaylist(data.playlist || []);
-          setGeneratingPlaylist(false);
-          setGenerationStage('complete');
-
-          // Store all transitions for later use
-          console.log('🔍 Complete data received:', data);
-          if (data.transitions && data.transitions.length > 0) {
-            setPlaylistTransitions(data.transitions);
-            console.log('🎶 Stored all transitions:', data.transitions.length);
-            console.log('🎶 First transition:', data.transitions[0]);
-
-            // Set the first transition's effect plan
-            const firstTransition = data.transitions[0];
-            if (firstTransition.effect_plan) {
-              setTransitionEffectPlan(firstTransition.effect_plan);
-              console.log('🎶 Set initial transition effect plan:', firstTransition.effect_plan);
-            } else {
-              console.log('⚠️ No effect_plan in first transition');
-            }
-          } else {
-            console.log('⚠️ No transitions in data');
-          }
-
-          eventSource.close();
-        } else if (data.type === 'error') {
-          setError(data.message);
-          setGeneratingPlaylist(false);
-          setGenerationStage('idle');
-          eventSource.close();
-        }
-      };
-
-      eventSource.onerror = (error) => {
-        console.error('EventSource error:', error);
-        setError('Failed to generate playlist. Make sure the AI service is running.');
+      // Update UI with results
+      setStageMessage('DJ set generated successfully!');
+      setStageProgress(1);
+      setGenerationStage('complete');
+      
+      // Convert DJ set tracks to playlist format for compatibility
+      const playlist = djSet.tracks.map((track) => ({
+        filename: track.filepath.split('/').pop() || track.filepath,
+        filepath: track.filepath,
+        title: track.title,
+        artist: track.artist,
+        album: track.album || null,
+        genre: track.genre || null,
+        year: null,
+        has_artwork: false,
+        bpm: track.bpm,
+        duration: track.end_time - track.start_time,
+      }));
+      
+      setGeneratedPlaylist(playlist);
+      setPlaylistTransitions(djSet.transitions);
+      
+      // Set detected mood based on the vibe
+      setDetectedMood({
+        genres: [...new Set(djSet.tracks.map(t => t.genre).filter(Boolean))] as string[],
+        energy: djSet.tracks.reduce((sum, t) => sum + t.energy_level, 0) / djSet.tracks.length,
+        mood: djSet.vibe_description,
+      });
+      
+      setGeneratingPlaylist(false);
+      
+      // Auto-load the DJ set into the player (pre-render and prepare for playback)
+      // Pass the DJ set directly since setState is async
+      handlePlayDJSet(djSet);
+      
+      // Clear any existing scroll timer
+      if (scrollTimerRef.current) {
+        clearTimeout(scrollTimerRef.current);
+      }
+      
+      // Smooth scroll to bottom to show player after a short delay
+      scrollTimerRef.current = setTimeout(() => {
+        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+        scrollTimerRef.current = null;
+      }, 500);
+    } catch (err) {
+      // Check if the error is due to request being aborted
+      if (err instanceof Error && err.name === 'AbortError') {
+        console.log('Generation request was cancelled');
+        // Reset state without showing error
         setGeneratingPlaylist(false);
         setGenerationStage('idle');
-        eventSource.close();
-      };
-    } catch (err) {
-      console.error('Error generating playlist:', err);
-      setError('Failed to generate playlist. Make sure the AI service is running.');
+        return;
+      }
+      
+      console.error('Error generating DJ set:', err);
+      setError(err instanceof Error ? err.message : 'Failed to generate DJ set. Make sure the AI service is running.');
       setGeneratingPlaylist(false);
       setGenerationStage('idle');
+    } finally {
+      // Clear the ref when done
+      if (generateRequestRef.current === abortController) {
+        generateRequestRef.current = null;
+      }
+    }
+  };
+
+  const handlePlayDJSet = async (djSetToPlay?: DJSet) => {
+    // Use the passed DJ set or fall back to state
+    const djSet = djSetToPlay || currentDJSet;
+    
+    if (!djSet) {
+      console.error('No DJ set to play');
+      return;
+    }
+    
+    console.log('handlePlayDJSet called with:', djSet);
+    
+    try {
+      // Use the new playDJSet method from AudioPlayerContext
+      await playDJSet(djSet);
+      
+      showSuccess('DJ set is ready! Click play to start.');
+      
+    } catch (err) {
+      console.error('Error in handlePlayDJSet:', err);
+      
+      // The pre-rendered file might not exist yet or the server might be down
+      const errorMessage = err instanceof Error ? err.message : 'Failed to play DJ set';
+      
+      if (errorMessage.includes('not found') || errorMessage.includes('404') || errorMessage.includes('Failed to load')) {
+        showError('Pre-rendered audio file not ready. The DJ set may have expired. Please generate a new one.');
+        // Reset the DJ set since it's no longer valid
+        setCurrentDJSet(null);
+        setGeneratedPlaylist([]);
+      } else {
+        showError(errorMessage);
+        // Keep the DJ set for retry
+      }
     }
   };
 
   const handlePlayGeneratedPlaylist = async () => {
-    if (generatedPlaylist.length > 0) {
-      console.log('🎵 Playing generated playlist with', generatedPlaylist.length, 'tracks');
-
-      // Enable DJ mode FIRST if not already enabled
-      if (!djMode) {
-        console.log('🎵 Enabling DJ mode for generated playlist...');
-        await toggleDjMode(); // Enable DJ mode BEFORE playing
-
-        // Small delay to ensure DJ mode is fully initialized
-        await new Promise((resolve) => setTimeout(resolve, 100));
-      }
-
-      // Now play the playlist in DJ mode
-      console.log('🎵 Starting playlist playback in DJ mode...');
-      await playTrack(generatedPlaylist[0], generatedPlaylist);
-    }
+    // This function is deprecated - handlePlayDJSet is called automatically
+    console.warn('handlePlayGeneratedPlaylist is deprecated. Using server-side DJ sets.');
   };
 
   const handleFirstRunComplete = async () => {
@@ -406,15 +469,53 @@ export default function Home() {
                   />
                 </div>
 
-                {!generatingPlaylist && (
-                  <button
-                    onClick={handleGenerateVibePlaylist}
-                    disabled={!vibeInput.trim()}
-                    className="px-6 py-3 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg text-white font-medium transition"
-                  >
-                    ✨ Generate Playlist
-                  </button>
-                )}
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm font-medium">Track Length:</label>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setTrackLengthOption('30s')}
+                        className={`px-3 py-1 rounded-lg text-sm font-medium transition ${
+                          trackLengthOption === '30s'
+                            ? 'bg-purple-600 text-white'
+                            : 'bg-zinc-700 hover:bg-zinc-600 text-gray-300'
+                        }`}
+                      >
+                        30s
+                      </button>
+                      <button
+                        onClick={() => setTrackLengthOption('60s')}
+                        className={`px-3 py-1 rounded-lg text-sm font-medium transition ${
+                          trackLengthOption === '60s'
+                            ? 'bg-purple-600 text-white'
+                            : 'bg-zinc-700 hover:bg-zinc-600 text-gray-300'
+                        }`}
+                      >
+                        60s
+                      </button>
+                      <button
+                        onClick={() => setTrackLengthOption('full')}
+                        className={`px-3 py-1 rounded-lg text-sm font-medium transition ${
+                          trackLengthOption === 'full'
+                            ? 'bg-purple-600 text-white'
+                            : 'bg-zinc-700 hover:bg-zinc-600 text-gray-300'
+                        }`}
+                      >
+                        Full
+                      </button>
+                    </div>
+                  </div>
+
+                  {!generatingPlaylist && (
+                    <button
+                      onClick={handleGenerateVibePlaylist}
+                      disabled={!vibeInput.trim()}
+                      className="px-6 py-3 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg text-white font-medium transition ml-auto"
+                    >
+                      ✨ Generate Playlist
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Enhanced AI Generation UI */}
@@ -438,13 +539,14 @@ export default function Home() {
                     <h4 className="font-medium text-lg">
                       Generated Playlist ({generatedPlaylist.length} tracks)
                     </h4>
-                    <button
-                      onClick={handlePlayGeneratedPlaylist}
-                      className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg font-medium transition flex items-center gap-2"
-                    >
-                      <PlayIcon className="h-4 w-4" />
-                      Play Playlist
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-green-400">
+                        ✅ Ready to play
+                      </span>
+                      <span className="text-xs text-gray-400">
+                        (Click play button in player below)
+                      </span>
+                    </div>
                   </div>
                   <div className="space-y-2 max-h-64 overflow-y-auto">
                     {generatedPlaylist.map((track, index) => (
@@ -456,19 +558,9 @@ export default function Home() {
                           <div className="font-medium">{track.title || track.filename}</div>
                           <div className="text-gray-400">{track.artist || 'Unknown Artist'}</div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => handleTrackSelect(track)}
-                            className="px-2 py-1 bg-purple-600 hover:bg-purple-700 rounded text-xs"
-                          >
-                            Select
-                          </button>
-                          <button
-                            onClick={() => handleAddToQueue(track)}
-                            className="px-2 py-1 bg-blue-600 hover:bg-blue-700 rounded text-xs"
-                          >
-                            Queue
-                          </button>
+                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                          {track.bpm && <span>{track.bpm} BPM</span>}
+                          {formatDuration(track.duration)}
                         </div>
                       </div>
                     ))}
@@ -492,8 +584,6 @@ export default function Home() {
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                       <DjModeControls />
                     </div>
-                    {/* Advanced DJ Controls */}
-                    <AdvancedDjControls />
                   </div>
                 )}
               </div>

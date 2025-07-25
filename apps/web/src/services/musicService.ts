@@ -118,4 +118,47 @@ export const musicService = {
   getStreamUrl(filepath: string): string {
     return `${API_BASE_URL}/track/${encodeURIComponent(filepath)}/stream`;
   },
+
+  getDJSetStreamUrl(setId?: string): string {
+    // CRITICAL: Pre-rendered streaming is REQUIRED - no fallbacks allowed
+    if (!setId) {
+      const errorMsg = 'CRITICAL ERROR: DJ set ID is required for streaming. Pre-rendering may have failed!';
+      console.error(errorMsg);
+      throw new Error(errorMsg);
+    }
+    
+    // Use pre-rendered streaming endpoint - this is the ONLY valid path
+    const url = `${API_BASE_URL}/api/audio/stream/prerendered/${encodeURIComponent(setId)}`;
+    console.log('Using pre-rendered stream URL:', url);
+    return url;
+  },
+  
+  getDJSetChunkedStreamUrl(setId: string): string {
+    // Chunked streaming endpoint for reliable playback
+    return `${API_BASE_URL}/api/audio/stream/chunked/${encodeURIComponent(setId)}`;
+  },
+  
+  
+  getDJSetFileUrl(setId: string): string {
+    // Pre-rendered file endpoint
+    return `${API_BASE_URL}/api/audio/stream/file/${encodeURIComponent(setId)}`;
+  },
+  
+  async checkStreamStatus(setId: string): Promise<{
+    is_rendered: boolean;
+    render_progress_seconds: number;
+    file_ready: boolean;
+    file_url: string | null;
+  }> {
+    const response = await fetch(`${API_BASE_URL}/api/audio/stream/status/${encodeURIComponent(setId)}`);
+    if (!response.ok) {
+      throw new Error('Failed to check stream status');
+    }
+    return response.json();
+  },
+  
+  getTestSineWaveUrl(): string {
+    // Test sine wave endpoint
+    return `${API_BASE_URL}/api/audio/test-sine-wave`;
+  },
 };

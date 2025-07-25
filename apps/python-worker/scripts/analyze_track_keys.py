@@ -165,7 +165,7 @@ class KeyAnalyzer:
                     )
                 else:
                     error_count += 1
-                    logger.error(f"  ✗ Failed to update database")
+                    logger.error("  ✗ Failed to update database")
 
                 # Show ETA every 10 tracks
                 if i % 10 == 0:
@@ -174,7 +174,7 @@ class KeyAnalyzer:
             # Summary
             elapsed_total = time.time() - start_time
             logger.info("=" * 60)
-            logger.info(f"Key analysis complete!")
+            logger.info("Key analysis complete!")
             logger.info(f"  Total tracks: {total_tracks}")
             logger.info(f"  Successful: {success_count}")
             logger.info(f"  Errors: {error_count}")

@@ -20,16 +20,9 @@ const Sidebar = () => {
     isPlaying,
     djMode,
     toggleDjMode,
-    nextTrack: upcomingTrack,
-    isTransitioning,
-    currentTime,
-    duration,
-    autoTransition,
-    setAutoTransition,
-    mixMode,
-    setMixMode,
-    mixInterval,
-    setMixInterval,
+    isServerStreaming,
+    djSet,
+    playbackStatus,
   } = useAudioPlayer();
 
   const formatDuration = (duration: number): string => {
@@ -126,58 +119,49 @@ const Sidebar = () => {
                 ) : (
                   <PauseIcon className="h-3 w-3 text-gray-400" />
                 )}
-                <span className="text-xs text-gray-500">
-                  {formatTime(currentTime)} / {formatDuration(duration)}
-                </span>
+                {isServerStreaming && playbackStatus && (
+                  <span className="text-xs text-gray-500">
+                    Track {(playbackStatus.current_track_order || 0) + 1} of {playbackStatus.total_tracks || 0}
+                  </span>
+                )}
               </div>
             </div>
           </div>
 
           {/* Progress Bar */}
-          <div className="w-full bg-gray-700 rounded-full h-1 mb-3">
-            <div
-              className="bg-purple-500 h-1 rounded-full transition-all duration-300"
-              style={{ width: duration > 0 ? `${(currentTime / duration) * 100}%` : '0%' }}
-            ></div>
-          </div>
+          {isServerStreaming && playbackStatus && djSet && (
+            <div className="w-full bg-gray-700 rounded-full h-1 mb-3">
+              <div
+                className="bg-purple-500 h-1 rounded-full transition-all duration-300"
+                style={{ width: `${(playbackStatus.elapsed_time || 0) / djSet.total_duration * 100}%` }}
+              ></div>
+            </div>
+          )}
 
           {/* Next Track in DJ Mode */}
-          {djMode && upcomingTrack && (
+          {isServerStreaming && playbackStatus && djSet && 
+           playbackStatus.current_track_order !== undefined && 
+           playbackStatus.current_track_order < djSet.tracks.length - 1 && (
             <div className="border-t border-zinc-700 pt-3">
               <p className="text-xs text-orange-400 font-medium mb-2 uppercase tracking-wide">
                 Next Up
               </p>
               <div className="flex gap-2">
-                {upcomingTrack.has_artwork ? (
-                  <div className="w-8 h-8 rounded overflow-hidden bg-zinc-700 relative flex-shrink-0">
-                    <Image
-                      src={musicService.getArtworkUrl(upcomingTrack.filepath)}
-                      alt={upcomingTrack.album || 'Album artwork'}
-                      fill
-                      className="object-cover"
-                      onError={(e) => {
-                        const target = e.target as HTMLImageElement;
-                        target.style.display = 'none';
-                      }}
-                    />
-                  </div>
-                ) : (
-                  <div className="w-8 h-8 rounded bg-zinc-700 flex items-center justify-center text-xs text-gray-400 flex-shrink-0">
-                    ♪
-                  </div>
-                )}
+                <div className="w-8 h-8 rounded bg-zinc-700 flex items-center justify-center text-xs text-gray-400 flex-shrink-0">
+                  ♪
+                </div>
                 <div className="flex-1 min-w-0">
                   <p
                     className="text-sm font-medium text-white truncate"
-                    title={upcomingTrack.title || upcomingTrack.filename}
+                    title={djSet.tracks[playbackStatus.current_track_order + 1].title}
                   >
-                    {upcomingTrack.title || upcomingTrack.filename}
+                    {djSet.tracks[playbackStatus.current_track_order + 1].title}
                   </p>
                   <p
                     className="text-xs text-gray-400 truncate"
-                    title={upcomingTrack.artist || 'Unknown Artist'}
+                    title={djSet.tracks[playbackStatus.current_track_order + 1].artist}
                   >
-                    {upcomingTrack.artist || 'Unknown Artist'}
+                    {djSet.tracks[playbackStatus.current_track_order + 1].artist}
                   </p>
                 </div>
               </div>
@@ -193,97 +177,17 @@ const Sidebar = () => {
             Mix Settings
           </h2>
 
-          {/* Auto Transition Toggle */}
-          <div className="flex items-center justify-between mb-4">
-            <span className="text-sm text-gray-300">Auto-Mix</span>
-            <button
-              onClick={() => setAutoTransition(!autoTransition)}
-              className={`px-3 py-1 rounded-full text-xs font-medium transition ${
-                autoTransition ? 'bg-green-600 text-white' : 'bg-gray-600 text-gray-300'
-              }`}
-            >
-              {autoTransition ? 'ON' : 'OFF'}
-            </button>
-          </div>
-
-          {/* Mix Mode Selection */}
-          <div className="space-y-2">
-            <label className="text-xs text-gray-400 uppercase tracking-wide">Mix Mode</label>
-            <div className="grid grid-cols-3 gap-1">
-              <button
-                onClick={() => setMixMode('track-end')}
-                className={`px-2 py-2 rounded text-xs font-medium transition flex flex-col items-center gap-1 ${
-                  mixMode === 'track-end'
-                    ? 'bg-purple-600 text-white'
-                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                }`}
-                title="Auto-mix near end of track"
-              >
-                <Cog6ToothIcon className="h-4 w-4" />
-                Track End
-              </button>
-              <button
-                onClick={() => setMixMode('interval')}
-                className={`px-2 py-2 rounded text-xs font-medium transition flex flex-col items-center gap-1 ${
-                  mixMode === 'interval'
-                    ? 'bg-purple-600 text-white'
-                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                }`}
-                title="Auto-mix at fixed intervals"
-              >
-                <ClockIcon className="h-4 w-4" />
-                Interval
-              </button>
-              <button
-                onClick={() => setMixMode('hot-cue')}
-                className={`px-2 py-2 rounded text-xs font-medium transition flex flex-col items-center gap-1 ${
-                  mixMode === 'hot-cue'
-                    ? 'bg-purple-600 text-white'
-                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                }`}
-                title="Auto-mix at hot cue points"
-              >
-                <MusicalNoteIcon className="h-4 w-4" />
-                Hot Cue
-              </button>
-            </div>
-          </div>
-
-          {/* Interval Settings */}
-          {mixMode === 'interval' && (
-            <div className="mt-4 space-y-2">
-              <label className="text-xs text-gray-400 uppercase tracking-wide">Mix Interval</label>
-              <div className="grid grid-cols-3 gap-1">
-                <button
-                  onClick={() => setMixInterval(30)}
-                  className={`px-2 py-2 rounded text-xs font-medium transition ${
-                    mixInterval === 30
-                      ? 'bg-purple-600 text-white'
-                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                  }`}
-                >
-                  30s
-                </button>
-                <button
-                  onClick={() => setMixInterval(60)}
-                  className={`px-2 py-2 rounded text-xs font-medium transition ${
-                    mixInterval === 60
-                      ? 'bg-purple-600 text-white'
-                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                  }`}
-                >
-                  60s
-                </button>
-                <button
-                  onClick={() => setMixInterval(90)}
-                  className={`px-2 py-2 rounded text-xs font-medium transition ${
-                    mixInterval === 90
-                      ? 'bg-purple-600 text-white'
-                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                  }`}
-                >
-                  90s
-                </button>
+          {/* DJ Set Info */}
+          {isServerStreaming && djSet && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-300">DJ Set</span>
+                <span className="text-xs text-purple-400 font-medium">STREAMING</span>
+              </div>
+              <div className="text-xs text-gray-400 space-y-1">
+                <p>Vibe: {djSet.vibe_description}</p>
+                <p>Duration: {formatDuration(djSet.total_duration)}</p>
+                <p>Energy: {djSet.energy_pattern}</p>
               </div>
             </div>
           )}

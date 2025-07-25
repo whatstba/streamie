@@ -10,11 +10,11 @@ os.environ["MUSIC_DIR"] = MUSIC_DIR
 
 from utils.librosa import run_beat_track
 from utils.id3_reader import extract_artwork
-from utils.db import get_db
 from agents.dj_agent import DJAgent  # Import the DJ agent
-from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
+from fastapi import FastAPI, HTTPException, Request, BackgroundTasks, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, StreamingResponse
+from contextlib import asynccontextmanager
 from utils.sqlite_db import get_sqlite_db
 from utils.db_migrations import run_migrations
 from utils.music_library import MusicLibraryManager
@@ -24,18 +24,128 @@ from utils.enhanced_analyzer import EnhancedTrackAnalyzer
 from utils.metadata_analyzer import MetadataAnalyzer
 
 from pydantic import BaseModel
+import logging
+
+# Configure logger
+logger = logging.getLogger(__name__)
 from typing import List, Optional, Dict, Any
 import mimetypes
 import asyncio
 import sqlite3
 from datetime import datetime
 import json
+from concurrent.futures import ThreadPoolExecutor
 
-# Import the AI router - temporarily disabled
-# from routers.ai_router import router as ai_router
+# Import the deck router
+from routers.deck_router import router as deck_router
 
-# Create FastAPI app instance
-app = FastAPI(title="AI DJ Backend")
+# Import the mixer router
+from routers.mixer_router import router as mixer_router
+
+# Import the analysis router
+from routers.analysis_router import router as analysis_router
+
+# Import the mix router
+from routers.mix_router import router as mix_router
+
+# Import the audio router
+from routers.audio_router import router as audio_router
+
+# Import service manager for cleanup
+from services.service_manager import service_manager
+
+# Initialize ThreadPoolExecutor for blocking operations
+executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="blocking-io")
+
+
+# Helper function to run blocking operations in executor
+async def run_in_executor(func, *args):
+    """Run a blocking function in the thread pool executor"""
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(executor, func, *args)
+
+
+# WebSocket Connection Manager
+class ConnectionManager:
+    """Manages WebSocket connections for real-time playback status updates"""
+    
+    def __init__(self):
+        self.active_connections: List[WebSocket] = []
+        self._lock = asyncio.Lock()
+    
+    async def connect(self, websocket: WebSocket):
+        """Accept new WebSocket connection"""
+        await websocket.accept()
+        async with self._lock:
+            self.active_connections.append(websocket)
+        logger.info(f"🔌 WebSocket connected. Total connections: {len(self.active_connections)}")
+    
+    async def disconnect(self, websocket: WebSocket):
+        """Remove WebSocket connection"""
+        async with self._lock:
+            if websocket in self.active_connections:
+                self.active_connections.remove(websocket)
+        logger.info(f"🔌 WebSocket disconnected. Total connections: {len(self.active_connections)}")
+    
+    async def send_personal_message(self, message: str, websocket: WebSocket):
+        """Send message to specific connection"""
+        try:
+            await websocket.send_text(message)
+        except Exception as e:
+            logger.error(f"Error sending message to websocket: {e}")
+    
+    async def broadcast(self, message: str):
+        """Send message to all connected clients"""
+        disconnected = []
+        async with self._lock:
+            connections = self.active_connections.copy()
+        
+        for connection in connections:
+            try:
+                await connection.send_text(message)
+            except Exception as e:
+                logger.error(f"Error broadcasting to websocket: {e}")
+                disconnected.append(connection)
+        
+        # Clean up disconnected clients
+        if disconnected:
+            async with self._lock:
+                for conn in disconnected:
+                    if conn in self.active_connections:
+                        self.active_connections.remove(conn)
+
+
+# Initialize connection manager
+manager = ConnectionManager()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manage application lifecycle"""
+    # Startup
+    logger.info("🚀 Starting up application...")
+    
+    # Run database migrations
+    run_migrations(db_path)
+
+    # Check if this is first run
+    if music_library.is_first_run():
+        print("🎵 First run detected - please configure music folders")
+    else:
+        print(
+            "✅ Music library ready - tracks available, analysis on manual request only"
+        )
+    
+    yield
+    
+    # Shutdown
+    logger.info("🛑 Shutting down application...")
+    await service_manager.shutdown()
+    logger.info("✅ Application shutdown complete")
+
+
+# Create FastAPI app instance with lifespan
+app = FastAPI(title="AI DJ Backend", lifespan=lifespan)
 
 # Enable CORS for our Next.js frontend
 app.add_middleware(
@@ -46,8 +156,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include the AI router - temporarily disabled
-# app.include_router(ai_router)
+# Include the deck router
+app.include_router(deck_router)
+
+# Include the mixer router
+app.include_router(mixer_router)
+
+# Include the analysis router
+app.include_router(analysis_router)
+
+# Include the mix router
+app.include_router(mix_router)
+
+# Include the audio router
+app.include_router(audio_router)
+
 
 
 class SeratoHotCue(BaseModel):
@@ -129,25 +252,6 @@ enhanced_analyzer = EnhancedTrackAnalyzer(db_path)
 metadata_analyzer = MetadataAnalyzer(db_path)
 
 
-@app.on_event("startup")
-async def startup_event():
-    """Initialize the application on startup."""
-    # Run database migrations
-    run_migrations(db_path)
-
-    # Check if this is first run
-    if music_library.is_first_run():
-        print("🎵 First run detected - please configure music folders")
-    else:
-        print(
-            "✅ Music library ready - tracks available, analysis on manual request only"
-        )
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Cleanup on shutdown."""
-    pass  # No cleanup needed - analysis queue only starts on manual request
 
 
 @app.get("/")
@@ -155,17 +259,6 @@ async def root():
     """Root endpoint to verify API is running"""
     return {"status": "ok", "message": "AI DJ Backend is running", "ai_enabled": False}
 
-
-@app.get("/db/tracks", response_model=List[TrackDBInfo])
-async def list_tracks_from_db():
-    """Return track info stored in MongoDB."""
-    db = get_db()
-    docs = list(db.tracks.find({}))
-    tracks = []
-    for d in docs:
-        d.pop("_id", None)
-        tracks.append(TrackDBInfo(**d))
-    return tracks
 
 
 @app.get("/tracks", response_model=List[TrackInfo])
@@ -967,6 +1060,736 @@ async def mark_first_run_complete():
 
 
 # WebSocket endpoint removed - using periodic HTTP polling instead
+
+
+# DJ Set Generation and Playback Endpoints
+from models.dj_set_models import DJSet, DJSetTrack
+from pydantic import BaseModel, Field
+
+
+class DJSetGenerateRequest(BaseModel):
+    """Request to generate a DJ set"""
+
+    vibe_description: str = Field(description="Natural language vibe description")
+    duration_minutes: int = Field(default=30, description="Target duration in minutes")
+    energy_pattern: str = Field(
+        default="wave", description="Energy pattern: steady, building, wave"
+    )
+    name: Optional[str] = Field(default=None, description="Optional name for the set")
+    track_length_seconds: Optional[int] = Field(
+        default=None, 
+        description="Max track length in seconds (e.g., 30, 60) before transition. None for full track"
+    )
+
+
+class DJSetGenerateResponse(BaseModel):
+    """Response after generating a DJ set"""
+
+    set_id: str
+    name: str
+    track_count: int
+    total_duration: float
+    tracks: List[Dict]
+    transitions: List[Dict]
+
+
+@app.post("/api/dj-set/generate", response_model=DJSetGenerateResponse)
+async def generate_dj_set(request: DJSetGenerateRequest):
+    """Generate a complete DJ set with pre-planned transitions"""
+    try:
+        logger.info(f"🎛️ Generating DJ set: {request.vibe_description}")
+
+        # Get DJ set service
+        dj_set_service = await service_manager.get_dj_set_service()
+
+        # Generate the set
+        dj_set = await dj_set_service.generate_dj_set(
+            vibe_description=request.vibe_description,
+            duration_minutes=request.duration_minutes,
+            energy_pattern=request.energy_pattern,
+            name=request.name,
+            track_length_seconds=request.track_length_seconds,
+        )
+
+        # Pre-render the DJ set immediately
+        logger.info("🎬 Pre-rendering DJ set...")
+        prerender_start = datetime.now()
+        
+        # Get shared prerenderer from service manager
+        prerenderer = await service_manager.get_audio_prerenderer()
+        
+        # Pre-render the set
+        rendered_filepath = await prerenderer.prerender_dj_set(dj_set)
+        prerender_duration = (datetime.now() - prerender_start).total_seconds()
+        logger.info(f"   ✅ Pre-rendering complete in {prerender_duration:.1f}s")
+        logger.info(f"   Rendered file ready at: {rendered_filepath}")
+
+        # Initialize playback state (but don't start playing)
+        logger.info("🎮 Initializing playback state...")
+        playback_controller = await service_manager.get_set_playback_controller()
+        await playback_controller.register_for_playback(dj_set)
+        logger.info("   ✅ Playback state initialized (not playing)")
+
+        # Convert to response format
+        return DJSetGenerateResponse(
+            set_id=dj_set.id,
+            name=dj_set.name,
+            track_count=dj_set.track_count,
+            total_duration=dj_set.total_duration,
+            tracks=[
+                {
+                    "order": t.order,
+                    "filepath": t.filepath,
+                    "title": t.title,
+                    "artist": t.artist,
+                    "album": None,  # Add album field for frontend compatibility
+                    "genre": None,  # Add genre field for frontend compatibility
+                    "bpm": t.bpm,
+                    "key": t.key,
+                    "energy_level": t.energy_level,
+                    "deck": t.deck,
+                    "start_time": t.start_time,
+                    "end_time": t.end_time,
+                    "gain_adjust": t.gain_adjust,
+                    "tempo_adjust": t.tempo_adjust,
+                    "eq_low": t.eq_low,
+                    "eq_mid": t.eq_mid,
+                    "eq_high": t.eq_high,
+                    "mixing_note": t.mixing_note,
+                }
+                for t in dj_set.tracks
+            ],
+            transitions=[
+                {
+                    "from_track_order": t.from_track_order,
+                    "to_track_order": t.to_track_order,
+                    "start_time": t.start_time,
+                    "duration": t.duration,
+                    "type": t.type,
+                    "effects": [
+                        {
+                            "type": e.type,
+                            "start_at": e.start_at,
+                            "duration": e.duration,
+                            "intensity": e.intensity,
+                        }
+                        for e in t.effects
+                    ],
+                    "technique": t.technique_notes,
+                }
+                for t in dj_set.transitions
+            ],
+        )
+
+    except Exception as e:
+        logger.error(f"❌ Error generating DJ set: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/dj-set/{set_id}/play")
+async def play_dj_set(set_id: str):
+    """Start playing a DJ set"""
+    try:
+        # Get services
+        dj_set_service = await service_manager.get_dj_set_service()
+        playback_controller = await service_manager.get_set_playback_controller()
+
+        # Get the DJ set from memory
+        dj_set = dj_set_service.get_dj_set(set_id)
+        if not dj_set:
+            raise HTTPException(
+                status_code=404,
+                detail=f"DJ set {set_id} not found. It may have expired from memory.",
+            )
+        
+        # Start playback
+        session_id = await playback_controller.start_playback(dj_set)
+        
+        return {
+            "status": "playing",
+            "set_id": dj_set.id,
+            "session_id": session_id,
+            "name": dj_set.name,
+            "track_count": dj_set.track_count,
+            "total_duration": dj_set.total_duration,
+            "message": f"DJ set '{dj_set.name}' is now playing. Stream audio from /api/audio/stream/prerendered/{dj_set.id}",
+        }
+
+    except Exception as e:
+        logger.error(f"❌ Error starting DJ set playback: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/dj-set/play-immediately")
+async def generate_and_play_dj_set(request: DJSetGenerateRequest):
+    """Generate a DJ set and immediately start playing it"""
+    endpoint_start = datetime.now()
+    try:
+        logger.info(f"🎛️ Generating and playing DJ set: {request.vibe_description}")
+        logger.info(f"   Duration: {request.duration_minutes} minutes")
+        logger.info(f"   Energy pattern: {request.energy_pattern}")
+        logger.info(f"   Request time: {endpoint_start.isoformat()}")
+
+        # Get services
+        logger.info("📡 Getting services...")
+        service_start = datetime.now()
+        dj_set_service = await service_manager.get_dj_set_service()
+        playback_controller = await service_manager.get_set_playback_controller()
+        service_duration = (datetime.now() - service_start).total_seconds()
+        logger.info(f"   ✅ Services ready in {service_duration:.2f}s")
+
+        # Generate the set
+        logger.info("🎵 Generating DJ set...")
+        generation_start = datetime.now()
+        dj_set = await dj_set_service.generate_dj_set(
+            vibe_description=request.vibe_description,
+            duration_minutes=request.duration_minutes,
+            energy_pattern=request.energy_pattern,
+            name=request.name,
+            track_length_seconds=request.track_length_seconds,
+        )
+        generation_duration = (datetime.now() - generation_start).total_seconds()
+        logger.info(f"   ✅ DJ set generated in {generation_duration:.1f}s")
+        logger.info(f"   Set ID: {dj_set.id}")
+        logger.info(f"   Set name: {dj_set.name}")
+        logger.info(f"   Track count: {dj_set.track_count}")
+        logger.info(f"   Total duration: {dj_set.total_duration:.1f}s")
+
+        # Pre-render the DJ set before starting playback
+        logger.info("🎬 Pre-rendering DJ set...")
+        prerender_start = datetime.now()
+        
+        # Get shared prerenderer from service manager
+        prerenderer = await service_manager.get_audio_prerenderer()
+        
+        # Pre-render the set
+        rendered_filepath = await prerenderer.prerender_dj_set(dj_set)
+        prerender_duration = (datetime.now() - prerender_start).total_seconds()
+        logger.info(f"   ✅ Pre-rendering complete in {prerender_duration:.1f}s")
+        logger.info(f"   Rendered file ready at: {rendered_filepath}")
+
+        # Start playback
+        logger.info("▶️ Starting playback...")
+        playback_start = datetime.now()
+        session_id = await playback_controller.start_playback(dj_set)
+        playback_duration = (datetime.now() - playback_start).total_seconds()
+        logger.info(f"   ✅ Playback started in {playback_duration:.2f}s")
+        logger.info(f"   Session ID: {session_id}")
+        
+        # Total time
+        total_time = (datetime.now() - endpoint_start).total_seconds()
+        logger.info(f"🎉 DJ set ready and playing! Total time: {total_time:.1f}s")
+
+        return {
+            "status": "playing",
+            "set_id": dj_set.id,
+            "session_id": session_id,
+            "name": dj_set.name,
+            "track_count": dj_set.track_count,
+            "total_duration": dj_set.total_duration,
+            "message": f"DJ set '{dj_set.name}' is now playing. Stream audio from /api/audio/stream/prerendered/{dj_set.id}",
+        }
+
+    except Exception as e:
+        error_time = (datetime.now() - endpoint_start).total_seconds()
+        logger.error(f"❌ Error generating and playing DJ set: {e}")
+        logger.error(f"   Error type: {type(e).__name__}")
+        logger.error(f"   Error occurred after {error_time:.1f}s")
+        logger.error(f"   Full error:", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/dj-set/playback/status")
+async def get_playback_status():
+    """Get current DJ set playback status"""
+    try:
+        # Get services
+        dj_set_service = await service_manager.get_dj_set_service()
+        playback_controller = await service_manager.get_set_playback_controller()
+
+        # Get active sessions
+        active_sessions = playback_controller.get_active_sessions()
+
+        if not active_sessions:
+            return {"is_playing": False, "message": "No DJ set is currently playing"}
+
+        # Get the first active session (we only support one for now)
+        set_id = active_sessions[0]
+        state = dj_set_service.get_playback_state(set_id)
+
+        if not state:
+            return {"is_playing": False, "message": "No playback state found"}
+
+        # Get DJ set once and cache it
+        dj_set = dj_set_service.get_dj_set(set_id)
+        
+        return {
+            "is_playing": state.is_playing,
+            "is_paused": state.is_paused,
+            "set_id": state.set_id,
+            "current_track_order": state.current_track_order,
+            "next_track_order": state.next_track_order,
+            "total_tracks": len(dj_set.tracks) if dj_set else 0,
+            "elapsed_time": state.elapsed_time,
+            "total_duration": dj_set.total_duration if dj_set else 0,
+            "next_transition_in": state.next_transition_in,
+            "active_decks": state.active_decks,
+            "primary_deck": state.primary_deck,
+            "in_transition": state.in_transition,
+            "transition_progress": state.transition_progress,
+            "set_name": dj_set.name if dj_set else None,
+        }
+
+    except Exception as e:
+        logger.error(f"❌ Error getting playback status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.websocket("/api/dj-set/playback/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    """WebSocket endpoint for real-time playback status updates and control"""
+    session_id = None
+    
+    try:
+        # Accept the WebSocket connection
+        await manager.connect(websocket)
+        session_id = f"ws-{id(websocket)}"
+        
+        # Send initial connection message
+        await websocket.send_json({
+            "type": "connected",
+            "sessionId": session_id,
+            "message": "WebSocket connection established"
+        })
+        
+        # Create background task for sending status updates
+        async def send_status_updates():
+            """Send periodic playback status updates"""
+            try:
+                while True:
+                    # Get services
+                    dj_set_service = await service_manager.get_dj_set_service()
+                    playback_controller = await service_manager.get_set_playback_controller()
+                    
+                    # Get active sessions
+                    active_sessions = playback_controller.get_active_sessions()
+                    
+                    if not active_sessions:
+                        status_data = {"is_playing": False, "message": "No DJ set is currently playing"}
+                    else:
+                        # Get the first active session
+                        set_id = active_sessions[0]
+                        state = dj_set_service.get_playback_state(set_id)
+                        
+                        if not state:
+                            status_data = {"is_playing": False, "message": "No playback state found"}
+                        else:
+                            # Get DJ set once and cache it
+                            dj_set = dj_set_service.get_dj_set(set_id)
+                            
+                            status_data = {
+                                "is_playing": state.is_playing,
+                                "is_paused": state.is_paused,
+                                "set_id": state.set_id,
+                                "current_track_order": state.current_track_order,
+                                "next_track_order": state.next_track_order,
+                                "total_tracks": len(dj_set.tracks) if dj_set else 0,
+                                "elapsed_time": state.elapsed_time,
+                                "total_duration": dj_set.total_duration if dj_set else 0,
+                                "next_transition_in": state.next_transition_in,
+                                "active_decks": state.active_decks,
+                                "primary_deck": state.primary_deck,
+                                "in_transition": state.in_transition,
+                                "transition_progress": state.transition_progress,
+                                "set_name": dj_set.name if dj_set else None,
+                            }
+                    
+                    # Send status update
+                    await websocket.send_json({
+                        "type": "playback_status",
+                        "data": status_data
+                    })
+                    
+                    # Wait before next update (500ms for responsive updates)
+                    await asyncio.sleep(0.5)
+                    
+            except WebSocketDisconnect:
+                logger.info(f"🔌 WebSocket {session_id} disconnected during status updates")
+                raise
+            except Exception as e:
+                logger.error(f"Error sending status updates: {e}")
+                await websocket.send_json({
+                    "type": "error",
+                    "message": f"Error sending status updates: {str(e)}"
+                })
+                raise
+        
+        # Start status update task
+        status_task = asyncio.create_task(send_status_updates())
+        
+        try:
+            # Handle incoming messages from client
+            while True:
+                data = await websocket.receive_json()
+                message_type = data.get("type")
+                
+                logger.info(f"📨 Received WebSocket message: {message_type}")
+                
+                # Handle different message types
+                if message_type == "ping":
+                    # Respond to ping with pong
+                    await websocket.send_json({
+                        "type": "pong",
+                        "timestamp": datetime.now().isoformat()
+                    })
+                
+                elif message_type == "play":
+                    # Handle play command
+                    set_id = data.get("setId")
+                    if set_id:
+                        try:
+                            playback_controller = await service_manager.get_set_playback_controller()
+                            dj_set_service = await service_manager.get_dj_set_service()
+                            
+                            # Get the DJ set object
+                            dj_set = dj_set_service.get_dj_set(set_id)
+                            if not dj_set:
+                                raise ValueError(f"DJ set {set_id} not found")
+                            
+                            # Start playback with the DJ set object
+                            await playback_controller.start_playback(dj_set)
+                            
+                            await websocket.send_json({
+                                "type": "command_result",
+                                "command": "play",
+                                "success": True,
+                                "message": "Playback started"
+                            })
+                        except Exception as e:
+                            await websocket.send_json({
+                                "type": "command_result",
+                                "command": "play",
+                                "success": False,
+                                "error": str(e)
+                            })
+                
+                elif message_type == "pause":
+                    # Handle pause command
+                    try:
+                        playback_controller = await service_manager.get_set_playback_controller()
+                        active_sessions = playback_controller.get_active_sessions()
+                        if active_sessions:
+                            success = await playback_controller.pause_playback(active_sessions[0])
+                            await websocket.send_json({
+                                "type": "command_result",
+                                "command": "pause",
+                                "success": success,
+                                "message": "Playback paused" if success else "Failed to pause"
+                            })
+                        else:
+                            await websocket.send_json({
+                                "type": "command_result",
+                                "command": "pause",
+                                "success": False,
+                                "error": "No active playback session"
+                            })
+                    except Exception as e:
+                        await websocket.send_json({
+                            "type": "command_result",
+                            "command": "pause",
+                            "success": False,
+                            "error": str(e)
+                        })
+                
+                elif message_type == "time_update":
+                    # Handle time update from frontend audio element
+                    elapsed_time = data.get("elapsed_time", 0)
+                    set_id = data.get("setId")
+                    if set_id:
+                        dj_set_service = await service_manager.get_dj_set_service()
+                        # Update the playback state with frontend-provided elapsed time
+                        dj_set_service.update_playback_state(
+                            set_id, 
+                            elapsed_time=elapsed_time
+                        )
+                        # Log every 10 seconds for debugging
+                        if int(elapsed_time) % 10 == 0:
+                            logger.debug(f"📡 Time update from frontend: {elapsed_time:.1f}s for set {set_id}")
+                
+                elif message_type == "audio_playing":
+                    # Handle audio playing event from frontend
+                    elapsed_time = data.get("elapsed_time", 0)
+                    set_id = data.get("setId")
+                    if set_id:
+                        logger.info(f"🎵 Audio started playing at {elapsed_time:.1f}s for set {set_id}")
+                        dj_set_service = await service_manager.get_dj_set_service()
+                        dj_set_service.update_playback_state(
+                            set_id, 
+                            is_playing=True,
+                            is_paused=False,
+                            elapsed_time=elapsed_time
+                        )
+                
+                elif message_type == "audio_paused":
+                    # Handle audio paused event from frontend
+                    elapsed_time = data.get("elapsed_time", 0)
+                    set_id = data.get("setId")
+                    if set_id:
+                        logger.info(f"⏸️ Audio paused at {elapsed_time:.1f}s for set {set_id}")
+                        dj_set_service = await service_manager.get_dj_set_service()
+                        dj_set_service.update_playback_state(
+                            set_id, 
+                            is_playing=True,  # Still considered "playing" but paused
+                            is_paused=True,
+                            elapsed_time=elapsed_time
+                        )
+                
+                elif message_type == "stop":
+                    # Handle stop command
+                    try:
+                        playback_controller = await service_manager.get_set_playback_controller()
+                        active_sessions = playback_controller.get_active_sessions()
+                        if active_sessions:
+                            success = await playback_controller.stop_playback(active_sessions[0])
+                            await websocket.send_json({
+                                "type": "command_result",
+                                "command": "stop",
+                                "success": success,
+                                "message": "Playback stopped" if success else "Failed to stop"
+                            })
+                        else:
+                            await websocket.send_json({
+                                "type": "command_result",
+                                "command": "stop",
+                                "success": False,
+                                "error": "No active playback session"
+                            })
+                    except Exception as e:
+                        await websocket.send_json({
+                            "type": "command_result",
+                            "command": "stop",
+                            "success": False,
+                            "error": str(e)
+                        })
+                
+                else:
+                    # Unknown message type
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": f"Unknown message type: {message_type}"
+                    })
+                    
+        finally:
+            # Cancel status update task
+            status_task.cancel()
+            try:
+                await status_task
+            except asyncio.CancelledError:
+                pass
+                
+    except WebSocketDisconnect:
+        logger.info(f"🔌 WebSocket {session_id} disconnected by client")
+    except Exception as e:
+        logger.error(f"WebSocket error: {e}")
+        try:
+            await websocket.send_json({
+                "type": "error",
+                "message": f"WebSocket error: {str(e)}"
+            })
+        except:
+            pass
+    finally:
+        await manager.disconnect(websocket)
+
+
+@app.post("/api/dj-set/playback/stop")
+async def stop_playback():
+    """Stop DJ set playback"""
+    try:
+        playback_controller = await service_manager.get_set_playback_controller()
+
+        # Get active sessions
+        active_sessions = playback_controller.get_active_sessions()
+
+        if not active_sessions:
+            return {
+                "status": "not_playing",
+                "message": "No DJ set is currently playing",
+            }
+
+        # Stop all active sessions
+        for set_id in active_sessions:
+            await playback_controller.stop_playback(set_id)
+
+        return {"status": "stopped", "message": "DJ set playback stopped"}
+
+    except Exception as e:
+        logger.error(f"❌ Error stopping playback: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/dj-set/playback/pause")
+async def pause_playback():
+    """Pause DJ set playback"""
+    try:
+        playback_controller = await service_manager.get_set_playback_controller()
+
+        # Get active sessions
+        active_sessions = playback_controller.get_active_sessions()
+
+        if not active_sessions:
+            return {
+                "status": "not_playing",
+                "message": "No DJ set is currently playing",
+            }
+
+        # Pause the first session
+        set_id = active_sessions[0]
+        success = await playback_controller.pause_playback(set_id)
+
+        return {
+            "status": "paused" if success else "error",
+            "message": "DJ set playback paused" if success else "Failed to pause",
+        }
+
+    except Exception as e:
+        logger.error(f"❌ Error pausing playback: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/dj-set/playback/resume")
+async def resume_playback():
+    """Resume DJ set playback"""
+    try:
+        playback_controller = await service_manager.get_set_playback_controller()
+
+        # Get active sessions
+        active_sessions = playback_controller.get_active_sessions()
+
+        if not active_sessions:
+            return {
+                "status": "not_playing",
+                "message": "No DJ set is currently playing",
+            }
+
+        # Resume the first session
+        set_id = active_sessions[0]
+        success = await playback_controller.resume_playback(set_id)
+
+        return {
+            "status": "resumed" if success else "error",
+            "message": "DJ set playback resumed" if success else "Failed to resume",
+        }
+
+    except Exception as e:
+        logger.error(f"❌ Error resuming playback: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/track/play")
+async def play_single_track(request: dict):
+    """Play a single track or queue of tracks without AI generation"""
+    try:
+        tracks = request.get("tracks", [])
+        if not tracks:
+            raise HTTPException(status_code=400, detail="No tracks provided")
+
+        logger.info(f"🎵 Playing {len(tracks)} track(s) directly")
+
+        # Get services
+        dj_set_service = await service_manager.get_dj_set_service()
+        playback_controller = await service_manager.get_set_playback_controller()
+
+        # Create a simple DJ set from the provided tracks
+        dj_set_tracks = []
+        current_time = 0.0
+
+        # Define a function to get track info from database
+        def get_track_from_db(filepath):
+            db_path = os.path.join(os.path.dirname(__file__), "tracks.db")
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+
+            cursor.execute("SELECT * FROM tracks WHERE filepath = ?", (filepath,))
+            columns = [description[0] for description in cursor.description]
+            row = cursor.fetchone()
+
+            conn.close()
+
+            if row:
+                return dict(zip(columns, row))
+            return None
+
+        for idx, track_data in enumerate(tracks):
+            # Get full track info from database using executor
+            track_info = await run_in_executor(
+                get_track_from_db, track_data["filepath"]
+            )
+            if not track_info:
+                logger.warning(f"Track not found: {track_data['filepath']}")
+                continue
+
+            # Create DJ set track
+            dj_track = DJSetTrack(
+                order=idx + 1,
+                filepath=track_info["filepath"],
+                title=track_info.get("title") or track_info["filename"],
+                artist=track_info.get("artist") or "Unknown Artist",
+                bpm=track_info.get("bpm", 120),
+                key=track_info.get("key"),
+                energy_level=track_info.get("energy_level", 0.5),
+                deck="A",  # Simple playback uses single deck
+                start_time=current_time,
+                end_time=current_time + track_info["duration"],
+                fade_in_time=current_time,
+                fade_out_time=current_time + track_info["duration"],
+                mixing_note="Direct playback",
+                tempo_adjust=0.0,
+                gain_adjust=1.0,
+                eq_low=0.0,
+                eq_mid=0.0,
+                eq_high=0.0,
+            )
+            dj_set_tracks.append(dj_track)
+            current_time += track_info["duration"]
+
+        if not dj_set_tracks:
+            raise HTTPException(status_code=404, detail="No valid tracks found")
+
+        # Create a simple DJ set
+        dj_set = DJSet(
+            id=f"direct-play-{datetime.now().strftime('%Y%m%d-%H%M%S')}",
+            name=f"Playing {dj_set_tracks[0].title}",
+            created_at=datetime.now(),
+            vibe_description="Direct playback",
+            energy_pattern="steady",
+            track_count=len(dj_set_tracks),
+            total_duration=current_time,
+            tracks=dj_set_tracks,
+            transitions=[],  # No transitions for direct playback
+            # Required fields for validation
+            energy_graph=[0.5]
+            * len(dj_set_tracks),  # Steady energy for direct playback
+            key_moments=[],  # No special moments for direct playback
+            mixing_style="direct",  # Simple direct playback style
+        )
+
+        # Start playback
+        session_id = await playback_controller.start_playback(dj_set)
+
+        return {
+            "status": "playing",
+            "set_id": dj_set.id,
+            "session_id": session_id,
+            "track_count": dj_set.track_count,
+            "total_duration": dj_set.total_duration,
+            "message": f"Now playing {dj_set_tracks[0].title}",
+        }
+
+    except Exception as e:
+        logger.error(f"❌ Error playing track: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 if __name__ == "__main__":
     import uvicorn
