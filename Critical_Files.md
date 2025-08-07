@@ -66,7 +66,7 @@ services/deck_manager.py                  # Virtual deck state management (A/B/C
 services/mixer_manager.py                 # Crossfader and master volume control
 services/effect_manager.py                # Manages and applies transition effects
 services/audio_prerenderer.py             # Pre-renders tracks with effects for smooth playback
-services/audio_streamer.py                # Converts numpy audio to streamable format
+services/chunked_audio_streamer.py        # Streams single WAV header + PCM chunks
 services/music_library.py                 # Scans and manages local music files
 ```
 
@@ -119,8 +119,9 @@ Makefile                                # Development commands (format, lint, te
 2. Backend: set_playback_controller.py orchestrates timing
 3. Track Loading: deck_manager.py loads tracks at precise times
 4. Audio Mixing: audio_engine.py reads deck states, applies effects
-5. Streaming: audio_streamer.py → GET /api/audio/stream/http
-6. Frontend: AudioPlayerContext.tsx receives and plays audio chunks
+5. Streaming: GET /api/audio/stream/prerendered/{setId} (full file with Range)
+   or GET /api/audio/stream/chunked/{setId} (one WAV header + PCM chunks)
+6. Frontend: AudioPlayerContext.tsx receives and plays audio
 ```
 
 ### Track Analysis Flow
@@ -162,6 +163,6 @@ Makefile                                # Development commands (format, lint, te
 
 - **Hot Cues**: Stored as JSON in database, extracted by `dj_set_service.py`
 - **Audio Format**: 44.1kHz stereo, processed as numpy arrays
-- **Streaming**: Base64-encoded audio chunks over HTTP
+- **Streaming**: WAV header + PCM chunk streaming, or full-file with Range
 - **AI Models**: gpt-4.1-mini (analysis), o4-mini (finalization)
 - **Music Source**: Scans ~/Downloads directory by default

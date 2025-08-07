@@ -510,23 +510,33 @@ class AudioPrerenderer:
                     transition_start_sample = int(transition_as_source.start_time * self.sample_rate)
                     transition_duration_samples = int(transition_as_source.duration * self.sample_rate)
                     
-                    # Apply crossfade curve to outgoing track
+                    # Apply crossfade curve to outgoing track (vectorized)
                     # Keep minimum volume during effects to make them audible
                     min_volume_during_effects = 0.5  # 50% minimum volume
-                    
-                    for j in range(transition_duration_samples):
-                        global_sample = transition_start_sample + j
-                        local_sample = global_sample - start_sample
-                        
-                        if 0 <= local_sample < processed_buffer.shape[1]:
-                            progress = j / transition_duration_samples
-                            fade_curve = self.apply_crossfade_curve(1.0 - progress, transition_as_source.crossfade_curve)
-                            
-                            # Keep minimum volume if effects are active
-                            if len(transition_as_source.effects) > 0:
-                                fade_curve = max(fade_curve, min_volume_during_effects)
-                            
-                            processed_buffer[:, local_sample] *= fade_curve
+
+                    local_start = transition_start_sample - start_sample
+                    local_end = local_start + transition_duration_samples
+                    # Clip to valid range within the processed buffer
+                    valid_start = max(0, local_start)
+                    valid_end = min(processed_buffer.shape[1], local_end)
+                    if valid_end > valid_start:
+                        # Compute progress array for the valid slice (0..1)
+                        total = valid_end - valid_start
+                        prog = np.linspace(0.0, 1.0, total, endpoint=False, dtype=np.float32)
+                        # Outgoing track fades out, so use (1 - progress)
+                        prog = 1.0 - prog
+                        curve = transition_as_source.crossfade_curve
+                        if curve == "linear":
+                            fade_curve = prog
+                        elif curve == "s-curve":
+                            fade_curve = 0.5 * (1.0 - np.cos(np.pi * prog))
+                        elif curve == "exponential":
+                            fade_curve = prog ** 2
+                        else:
+                            fade_curve = prog
+                        if len(transition_as_source.effects) > 0:
+                            fade_curve = np.maximum(fade_curve, min_volume_during_effects)
+                        processed_buffer[:, valid_start:valid_end] *= fade_curve
                             
                     # Apply transition effects to outgoing track
                     for effect_idx, effect in enumerate(transition_as_source.effects):
@@ -591,35 +601,40 @@ class AudioPrerenderer:
                     transition_start_sample = int(transition_as_target.start_time * self.sample_rate)
                     transition_duration_samples = int(transition_as_target.duration * self.sample_rate)
                     
-                    # Apply crossfade curve to incoming track
+                    # Apply crossfade curve to incoming track (vectorized)
                     # Keep minimum volume during effects to make them audible
                     min_volume_during_effects = 0.5  # 50% minimum volume
-                    
-                    for j in range(transition_duration_samples):
-                        global_sample = transition_start_sample + j
-                        local_sample = global_sample - start_sample
-                        
-                        if 0 <= local_sample < processed_buffer.shape[1]:
-                            progress = j / transition_duration_samples
-                            fade_curve = self.apply_crossfade_curve(progress, transition_as_target.crossfade_curve)
-                            
-                            # Keep minimum volume if effects are active (check previous transition)
-                            # Since effects are on the outgoing track, check if we're still in effect range
-                            effect_active = False
-                            if i > 0 and i - 1 < len(dj_set.transitions):
-                                prev_transition = dj_set.transitions[i - 1]
-                                if len(prev_transition.effects) > 0:
-                                    # Check if we're still within effect duration
-                                    for effect in prev_transition.effects:
-                                        effect_end = prev_transition.start_time + effect.start_at + effect.duration
-                                        if transition_as_target.start_time <= effect_end:
-                                            effect_active = True
-                                            break
-                            
-                            if effect_active:
-                                fade_curve = max(fade_curve, min_volume_during_effects)
-                            
-                            processed_buffer[:, local_sample] *= fade_curve
+
+                    local_start = transition_start_sample - start_sample
+                    local_end = local_start + transition_duration_samples
+                    valid_start = max(0, local_start)
+                    valid_end = min(processed_buffer.shape[1], local_end)
+                    if valid_end > valid_start:
+                        total = valid_end - valid_start
+                        prog = np.linspace(0.0, 1.0, total, endpoint=False, dtype=np.float32)
+                        curve = transition_as_target.crossfade_curve
+                        if curve == "linear":
+                            fade_curve = prog
+                        elif curve == "s-curve":
+                            fade_curve = 0.5 * (1.0 - np.cos(np.pi * prog))
+                        elif curve == "exponential":
+                            fade_curve = prog ** 2
+                        else:
+                            fade_curve = prog
+
+                        # Determine if previous transition effects may still be active
+                        effect_active = False
+                        if i > 0 and i - 1 < len(dj_set.transitions):
+                            prev_transition = dj_set.transitions[i - 1]
+                            if len(prev_transition.effects) > 0:
+                                for effect in prev_transition.effects:
+                                    effect_end = prev_transition.start_time + effect.start_at + effect.duration
+                                    if transition_as_target.start_time <= effect_end:
+                                        effect_active = True
+                                        break
+                        if effect_active:
+                            fade_curve = np.maximum(fade_curve, min_volume_during_effects)
+                        processed_buffer[:, valid_start:valid_end] *= fade_curve
                             
                 # Apply standard fade in/out if not part of a transition
                 if not transition_as_source and not transition_as_target:

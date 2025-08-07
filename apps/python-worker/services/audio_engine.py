@@ -383,8 +383,16 @@ class AudioEngine:
 
         # Apply tempo adjustment if needed
         if rate != 1.0 and segment.shape[1] > 0:
-            # Use phase vocoder for time stretching
-            segment = librosa.effects.time_stretch(segment, rate=rate)
+            # librosa.effects.time_stretch expects 1D arrays (mono)
+            # Apply per channel to preserve stereo
+            try:
+                stretched_left = librosa.effects.time_stretch(segment[0], rate=rate)
+                stretched_right = librosa.effects.time_stretch(segment[1], rate=rate)
+                # Re-stack into stereo
+                segment = np.stack([stretched_left, stretched_right])
+            except Exception as e:
+                # If stretching fails, fallback to original segment to avoid breaking the engine
+                logger.warning(f"🎵 Time-stretch failed (deck={audio_deck.deck_id}, rate={rate}): {e}")
 
         # Ensure correct buffer size
         if segment.shape[1] < self.buffer_size:

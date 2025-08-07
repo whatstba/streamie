@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 class ChunkedAudioStreamer:
     """
-    Streams audio in fixed-size WAV chunks with proper headers.
+    Streams audio as a single WAV stream: one header, then raw PCM chunks.
     Also pre-renders the complete file in the background.
     """
     
@@ -88,16 +88,20 @@ class ChunkedAudioStreamer:
     
     async def stream_chunked_audio(self, set_id: str) -> AsyncGenerator[bytes, None]:
         """
-        Stream audio in fixed-size WAV chunks.
-        Each chunk is a complete WAV file.
-        Also accumulates audio for background rendering.
+        Stream audio as one continuous WAV: send a single header first,
+        then emit interleaved PCM chunks. Also accumulate audio for background rendering.
         """
         logger.info(f"🎵 Starting chunked audio stream for set {set_id}")
         
         # Initialize collections for background rendering
         all_audio_buffers = []  # Collect all buffers for rendering
         
-        # Stream chunks
+        # Send a single WAV header up front for a large-but-safe data size
+        # Use ~1 hour header to satisfy browsers without needing Content-Length
+        header = self._create_stream_header()
+        yield header
+
+        # Stream PCM chunks
         chunk_count = 0
         audio_buffer = np.zeros((2, 0), dtype=np.float32)
         
@@ -114,7 +118,7 @@ class ChunkedAudioStreamer:
             # Accumulate audio for chunking
             audio_buffer = np.concatenate((audio_buffer, buffer), axis=1)
             
-            # Check if we have enough for a chunk
+            # Check if we have enough for a PCM chunk
             while audio_buffer.shape[1] >= self.chunk_samples:
                 # Extract chunk
                 chunk_audio = audio_buffer[:, :self.chunk_samples]
@@ -128,15 +132,12 @@ class ChunkedAudioStreamer:
                 interleaved[0::2] = audio_16bit[0]
                 interleaved[1::2] = audio_16bit[1]
                 
-                # Create complete WAV chunk
+                # Yield raw PCM payload (header already sent)
                 audio_data = interleaved.tobytes()
-                wav_header = self.create_wav_chunk_header(len(audio_data))
-                
-                # Yield complete WAV file chunk
-                yield wav_header + audio_data
+                yield audio_data
                 
                 chunk_count += 1
-                logger.info(f"🎵 Streamed chunk {chunk_count} ({self.chunk_duration}s)")
+                logger.info(f"🎵 Streamed PCM chunk {chunk_count} ({self.chunk_duration}s)")
                 
                 # Check if pre-rendered file is ready
                 if self._is_render_complete(set_id):
@@ -145,7 +146,7 @@ class ChunkedAudioStreamer:
                     # This is handled by frontend polling
                     return
         
-        # Stream any remaining audio as final chunk
+        # Stream any remaining audio as final PCM chunk
         if audio_buffer.shape[1] > 0:
             # Pad to minimum size if needed
             if audio_buffer.shape[1] < self.sample_rate:  # Less than 1 second
@@ -159,10 +160,9 @@ class ChunkedAudioStreamer:
             interleaved[1::2] = audio_16bit[1]
             
             audio_data = interleaved.tobytes()
-            wav_header = self.create_wav_chunk_header(len(audio_data))
-            yield wav_header + audio_data
+            yield audio_data
             
-            logger.info(f"🎵 Streamed final chunk ({audio_buffer.shape[1] / self.sample_rate:.1f}s)")
+            logger.info(f"🎵 Streamed final PCM chunk ({audio_buffer.shape[1] / self.sample_rate:.1f}s)")
         
         # Now render the complete file in the background
         asyncio.create_task(self._render_from_buffers(set_id, all_audio_buffers))
@@ -237,3 +237,13 @@ class ChunkedAudioStreamer:
             logger.info(f"🎵 Cleaned up temp directory: {self.temp_dir}")
         except Exception as e:
             logger.error(f"🎵 Cleanup error: {e}")
+
+    def _create_stream_header(self) -> bytes:
+        """Create a single WAV header with a large reasonable data size (~1h)."""
+        max_seconds = 60 * 60  # 1 hour
+        data_size = max_seconds * self.sample_rate * self.channels * (self.bit_depth // 8)
+        # Cap to avoid 32-bit overflow in header fields
+        max_size = 0xFFFFFFF0
+        if data_size > max_size:
+            data_size = max_size
+        return self.create_wav_chunk_header(data_size)

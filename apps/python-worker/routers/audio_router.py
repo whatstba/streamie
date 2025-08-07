@@ -15,7 +15,6 @@ import os
 
 from services.service_manager import service_manager
 from services.audio_engine import AudioEngine
-from services.audio_streamer import AudioStreamer
 from services.chunked_audio_streamer import ChunkedAudioStreamer
 from services.audio_prerenderer import AudioPrerenderer
 
@@ -57,16 +56,6 @@ async def get_audio_engine() -> AudioEngine:
     if not engine:
         raise HTTPException(status_code=503, detail="Audio engine not available")
     return engine
-
-
-# Dependency to get audio streamer
-async def get_audio_streamer() -> AudioStreamer:
-    """Get the audio streamer instance"""
-    # For now, create a new instance
-    # TODO: Get from service manager
-    engine = await get_audio_engine()
-    dj_toolset = engine.dj_toolset if hasattr(engine, "dj_toolset") else None
-    return AudioStreamer(dj_toolset)
 
 
 # Dependency to get chunked audio streamer
